@@ -1,0 +1,16 @@
+{
+  "id": "match-20261114-175240-addc9f",
+  "timestamp": "2026-11-14T17:52:40.114732+00:00",
+  "mode": "bullet",
+  "white_player": "Human",
+  "black_player": "DummyBot",
+  "initial_fen": "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
+  "result": "0-1",
+  "winner": "black",
+  "termination_reason": "White lost on time (flagged)",
+  "ply_count": 0,
+  "white_clock": -0.005028499999025368,
+  "black_clock": 0.05,
+  "moves": [],
+  "pgn": "[Event \"ChessFly 1+0 Bullet Match\"]\n[Site \"Local Machine\"]\n[Date \"2026.11.14\"]\n[Round \"?\"]\n[White \"Human\"]\n[Black \"DummyBot\"]\n[Result \"0-1\"]\n[TimeControl \"0+0\"]\n[Termination \"White lost on time (flagged)\"]\n\n0-1"
+}

@@ -108,6 +108,51 @@ python -m flychess.mcp_server
 
 The server exposes `start`, `observe`, `inspect_line`, and `play_move`. This is an **adapter foundation**, not verified Harbor integration. AfterQuery's starter kit and its scoring skeleton are absent here; adapt their exact contract, isolate verifier files, provide a frozen varied position set, three frontier-agent runs, a stronger reference, stop/idle baselines and exploit tests before submission. Do not claim this one-command local smoke test reproduces the judges' evaluation.
 
+## Playable Interactive ChessFly Application
+
+ChessFly includes a playable web application featuring an interactive board, 2D animated mascot, live match viewer, and persistent game replay:
+
+```bash
+# Launch interactive web application
+source .venv/bin/activate
+streamlit run app.py
+```
+
+### Key UI Features
+1. **Interactive Board (`flychess/component.py` & `flychess/frontend/index.html`)**:
+   - Built with full drag-and-drop and click-to-move piece handling.
+   - Highlights legal move destinations with subtle green dots (empty squares) and red target rings (captures).
+   - Pawn promotion choice modal (Queen, Rook, Bishop, Knight).
+   - Dynamic king-in-check red gradient glow and last-move highlights.
+   - Perspective flipping (White / Black) and offline-resilient SVG and Unicode piece fallbacks.
+   - Pure Python `python-chess` board enforces all legality server-side.
+
+2. **2D Animated Fly Mascot**:
+   - Positioned alongside the board with state-reactive animations:
+     - *Idle*: Calm intermittent wing flutter.
+     - *Thinking*: Rapid wing vibration and twitching antennae during model inference.
+     - *Happy*: Cheerful hop animation when advancing into positive position potential.
+     - *Upset*: Contracted eyes upon flagging or material collapse.
+
+3. **Live Match Streaming**:
+   - Supports **Human vs Fly Policy**, **Fly vs Stockfish**, and **Fly vs Gemini**.
+   - Dual ticking bullet clocks (`1:00`) with active turn pulsing.
+   - Asynchronous background match execution with live state polling.
+
+4. **Complete Game Persistence & Replay (`flychess/games.py`)**:
+   - Every completed match is saved to disk under `data/games/<id>.json` with full PGN, FEN history, per-move clocks, and transparent reward audit diagnostics.
+   - Interactive Replay tab with First, Prev, Play/Pause autoplay, Next, Last controls, ply scrub slider, and downloadable PGNs.
+   - Persists across page reloads.
+
+5. **Multi-Player Selector**:
+   - Human (You)
+   - Fly Policy (After RL: `outputs/fly-rl-bullet.npz`)
+   - Fly Policy (Pre-RL SFT: `outputs/fly-200.npz`)
+   - Shuffled-Wiring Control (`outputs/shuffled-200.npz` or `outputs/shuffled-rl-bullet.npz`)
+   - Stockfish (Weak · Elo 1350, Medium · Elo 1600, Strong · Full engine)
+   - Gemini (configured via `GEMINI_API_KEY` with graceful fallback)
+   - Time Controls: 1+0 Bullet (60s clocks) or Untimed Analysis.
+
 ## Important limitations and next tasks
 
 1. Real FlyWire data and Stockfish are downloaded separately; neither is secretly bundled in this zip.

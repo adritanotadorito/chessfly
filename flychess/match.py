@@ -1,218 +1,349 @@
-"""Real 1+0 bullet match runner against Stockfish with precise clock management."""
+"""Real-time match runner supporting 1+0 bullet and untimed games with live streaming."""
+import threading
 import time
+import uuid
 from datetime import datetime, timezone
-from typing import Callable, Optional
+from typing import Any, Callable, Dict, List, Optional
 
 import chess
 import chess.engine
 import chess.pgn
 import numpy as np
 
+from .games import save_game
 from .model import FlyPolicy
+from .players import BasePlayer, FlyPolicyPlayer, HumanPlayer, StockfishPlayer
 
 
-def format_clock(seconds: float) -> str:
-    """Format seconds into standard PGN clock format H:MM:SS or M:SS."""
+def format_clock(seconds: Optional[float]) -> str:
+    """Format seconds into standard clock format M:SS or MM:SS."""
+    if seconds is None:
+        return "∞"
     sec = max(0.0, seconds)
     m = int(sec // 60)
     s = int(sec % 60)
     return f"{m}:{s:02d}"
 
 
-class BulletMatch:
+# Global thread-safe registry of live matches
+_ACTIVE_LOCK = threading.Lock()
+_CURRENT_MATCH: Optional["ChessMatch"] = None
+
+
+def get_current_match() -> Optional["ChessMatch"]:
+    with _ACTIVE_LOCK:
+        return _CURRENT_MATCH
+
+
+def set_current_match(match: Optional["ChessMatch"]):
+    global _CURRENT_MATCH
+    with _ACTIVE_LOCK:
+        _CURRENT_MATCH = match
+
+
+class ChessMatch:
     def __init__(self,
-                 fly_model: FlyPolicy,
-                 stockfish_path: str = "/opt/homebrew/bin/stockfish",
-                 fly_color: chess.Color = chess.WHITE,
+                 white_player: BasePlayer,
+                 black_player: BasePlayer,
+                 timed: bool = True,
                  base_time: float = 60.0,
                  increment: float = 0.0,
-                 bot_difficulty: str = "weak",
-                 bot_options: Optional[dict] = None,
-                 sample_moves: bool = False):
-        self.fly_model = fly_model
-        self.stockfish_path = stockfish_path
-        self.fly_color = fly_color
+                 game_id: Optional[str] = None):
+        self.white_player = white_player
+        self.black_player = black_player
+        self.timed = timed
         self.base_time = base_time
         self.increment = increment
-        self.sample_moves = sample_moves
-        self.bot_difficulty = bot_difficulty
 
-        # Standard preset bot options
-        if bot_options is not None:
-            self.bot_options = bot_options
-        elif bot_difficulty == "weak":
-            self.bot_options = {"Skill Level": 0, "UCI_LimitStrength": True, "UCI_Elo": 1350, "Threads": 1, "Hash": 16}
-        elif bot_difficulty == "medium":
-            self.bot_options = {"Skill Level": 5, "UCI_LimitStrength": True, "UCI_Elo": 1600, "Threads": 1, "Hash": 16}
-        else: # "strong"
-            self.bot_options = {"Skill Level": 20, "UCI_LimitStrength": False, "Threads": 1, "Hash": 16}
+        timestamp_slug = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
+        self.game_id = game_id or f"match-{timestamp_slug}-{uuid.uuid4().hex[:6]}"
 
         self.board = chess.Board()
-        self.white_clock = base_time
-        self.black_clock = base_time
-        self.moves_log = []
+        self.white_clock = base_time if timed else None
+        self.black_clock = base_time if timed else None
+
+        self.moves_log: List[Dict[str, Any]] = []
         self.game_over = False
         self.result = "*"
         self.termination_reason = "In progress"
-        self.winner = None
+        self.winner: Optional[str] = None  # "white", "black", "draw"
 
-    def run(self, on_move: Optional[Callable[[dict], None]] = None) -> dict:
-        """Run the full 1+0 bullet match. Engine and model are preloaded before clocks start."""
-        engine = chess.engine.SimpleEngine.popen_uci(self.stockfish_path)
+        # Fly mascot visual state: "idle", "thinking", "happy", "upset"
+        self.fly_state = "idle"
+        self.last_move: Optional[str] = None
+
+        self._pending_human_move: Optional[chess.Move] = None
+        self._human_event = threading.Event()
+        self._thread: Optional[threading.Thread] = None
+
+        # Stockfish engine instance for bot moves if needed
+        self._engine: Optional[chess.engine.SimpleEngine] = None
+
+    def get_state(self) -> Dict[str, Any]:
+        """Thread-safe snapshot of live game state."""
+        return {
+            "game_id": self.game_id,
+            "fen": self.board.fen(),
+            "turn": "white" if self.board.turn == chess.WHITE else "black",
+            "white_player": self.white_player.name,
+            "black_player": self.black_player.name,
+            "white_clock": round(self.white_clock, 2) if self.white_clock is not None else None,
+            "black_clock": round(self.black_clock, 2) if self.black_clock is not None else None,
+            "formatted_white_clock": format_clock(self.white_clock),
+            "formatted_black_clock": format_clock(self.black_clock),
+            "timed": self.timed,
+            "is_game_over": self.game_over,
+            "result": self.result,
+            "winner": self.winner,
+            "termination": self.termination_reason,
+            "ply_count": len(self.moves_log),
+            "last_move": self.last_move,
+            "fly_state": self.fly_state,
+            "moves": list(self.moves_log),
+            "legal_moves": [m.uci() for m in self.board.legal_moves] if not self.game_over else [],
+            "is_human_turn": (self.white_player.is_human if self.board.turn == chess.WHITE else self.black_player.is_human) and not self.game_over,
+        }
+
+    def start_background(self):
+        """Start running the match in a background thread."""
+        set_current_match(self)
+        self._thread = threading.Thread(target=self._run_loop, daemon=True)
+        self._thread.start()
+
+    def submit_human_move(self, uci_str: str) -> bool:
+        """Submit a move played by a human in the UI."""
         try:
-            # Configure engine (Ponder is disabled by default in python-chess unless ponder=True is passed)
-            config = {k: v for k, v in self.bot_options.items() if k != "Ponder"}
-            engine.configure(config)
+            move = chess.Move.from_uci(uci_str)
+            if move in self.board.legal_moves:
+                self._pending_human_move = move
+                self._human_event.set()
+                return True
+        except Exception:
+            pass
+        return False
 
-            engine_id = engine.id.get("name", "Stockfish")
+    def _run_loop(self):
+        """Internal execution loop."""
+        # Find if either player is Stockfish
+        sf_player = None
+        if isinstance(self.white_player, StockfishPlayer):
+            sf_player = self.white_player
+        elif isinstance(self.black_player, StockfishPlayer):
+            sf_player = self.black_player
 
-            # Initialize PGN game structure
-            pgn_game = chess.pgn.Game()
-            pgn_game.headers["Event"] = "ChessFly Bullet 1+0 Match"
-            pgn_game.headers["Site"] = "Local Machine"
-            pgn_game.headers["Date"] = datetime.now(timezone.utc).strftime("%Y.%m.%d")
-            pgn_game.headers["Round"] = "1"
-            pgn_game.headers["White"] = "ChessFly-Policy" if self.fly_color == chess.WHITE else f"Stockfish ({self.bot_difficulty})"
-            pgn_game.headers["Black"] = f"Stockfish ({self.bot_difficulty})" if self.fly_color == chess.WHITE else "ChessFly-Policy"
-            pgn_game.headers["TimeControl"] = f"{int(self.base_time)}+{int(self.increment)}"
+        if sf_player:
+            try:
+                self._engine = chess.engine.SimpleEngine.popen_uci(sf_player.stockfish_path)
+                config = {k: v for k, v in sf_player.bot_options.items() if k != "Ponder"}
+                self._engine.configure(config)
+            except Exception as e:
+                self.game_over = True
+                self.termination_reason = f"Stockfish startup error: {e}"
+                return
 
-            current_node = pgn_game
+        pgn_game = chess.pgn.Game()
+        pgn_game.headers["Event"] = f"ChessFly {'1+0 Bullet' if self.timed else 'Analysis'} Match"
+        pgn_game.headers["Site"] = "Local Machine"
+        pgn_game.headers["Date"] = datetime.now(timezone.utc).strftime("%Y.%m.%d")
+        pgn_game.headers["White"] = self.white_player.name
+        pgn_game.headers["Black"] = self.black_player.name
+        pgn_game.headers["TimeControl"] = f"{int(self.base_time)}+0" if self.timed else "-"
+        current_node = pgn_game
 
+        try:
             while not self.game_over:
                 side_to_move = self.board.turn
-                is_fly_turn = (side_to_move == self.fly_color)
+                player = self.white_player if side_to_move == chess.WHITE else self.black_player
                 fen_before = self.board.fen()
-                legal_moves = list(self.board.legal_moves)
 
-                if not legal_moves:
-                    # Check terminal state before requesting move
+                if not list(self.board.legal_moves):
+                    self.game_over = True
                     if self.board.is_checkmate():
-                        self.game_over = True
-                        winner_color = not side_to_move
-                        self.winner = "fly" if winner_color == self.fly_color else "stockfish"
-                        self.result = "1-0" if winner_color == chess.WHITE else "0-1"
+                        self.winner = "black" if side_to_move == chess.WHITE else "white"
+                        self.result = "0-1" if side_to_move == chess.WHITE else "1-0"
                         self.termination_reason = "Checkmate"
+                        self.fly_state = "upset"
                     else:
-                        self.game_over = True
                         self.winner = "draw"
                         self.result = "1/2-1/2"
                         self.termination_reason = "Stalemate"
+                        self.fly_state = "idle"
                     break
 
-                # Start clock immediately before move request
-                t0 = time.perf_counter()
-
-                move = None
-                log_prob = None
-                try:
-                    if is_fly_turn:
-                        my_clock = self.white_clock if self.fly_color == chess.WHITE else self.black_clock
-                        opp_clock = self.black_clock if self.fly_color == chess.WHITE else self.white_clock
-                        legal, logits, probs, _ = self.fly_model.forward(self.board, my_clock=my_clock, opp_clock=opp_clock)
-                        if self.sample_moves:
-                            idx = self.fly_model.rng.choice(len(legal), p=probs)
-                        else:
-                            idx = int(probs.argmax())
-                        move = legal[idx]
-                        log_prob = float(np.log(max(probs[idx], 1e-12))) if "np" in globals() else 0.0
-                    else:
-                        limit = chess.engine.Limit(
-                            white_clock=self.white_clock,
-                            black_clock=self.black_clock,
-                            white_inc=self.increment,
-                            black_inc=self.increment,
-                        )
-                        engine_res = engine.play(self.board, limit)
-                        move = engine_res.move
-                except Exception as exc:
-                    self.game_over = True
-                    winner_color = not side_to_move
-                    self.winner = "fly" if winner_color == self.fly_color else "stockfish"
-                    self.result = "1-0" if winner_color == chess.WHITE else "0-1"
-                    self.termination_reason = f"Engine/Model exception: {exc}"
-                    break
-
-                elapsed = time.perf_counter() - t0
-
-                # Charge elapsed time strictly to the current player
-                if side_to_move == chess.WHITE:
-                    self.white_clock -= elapsed
-                    self.white_clock += self.increment
-                    remaining = self.white_clock
+                # Fly mascot state indication
+                if "Fly" in player.name:
+                    self.fly_state = "thinking"
                 else:
-                    self.black_clock -= elapsed
-                    self.black_clock += self.increment
-                    remaining = self.black_clock
+                    self.fly_state = "idle"
 
-                # Check flagging (time expiration)
-                if remaining <= 0:
-                    self.game_over = True
-                    opp_color = not side_to_move
-                    # FIDE rule on timeout: if opponent has insufficient mating material, draw.
-                    if self.board.has_insufficient_material(opp_color):
-                        self.winner = "draw"
-                        self.result = "1/2-1/2"
-                        self.termination_reason = f"{'White' if side_to_move == chess.WHITE else 'Black'} flagged, draw due to insufficient material"
+                t0 = time.perf_counter()
+                move = None
+
+                if player.is_human:
+                    # Wait for human input event
+                    self._human_event.clear()
+                    self._pending_human_move = None
+
+                    # If timed, loop with timeout to decrement clock
+                    if self.timed:
+                        while not self._human_event.is_set() and not self.game_over:
+                            self._human_event.wait(timeout=0.05)
+                            now = time.perf_counter()
+                            elapsed = now - t0
+                            t0 = now
+                            if side_to_move == chess.WHITE:
+                                self.white_clock -= elapsed
+                                if self.white_clock <= 0:
+                                    break
+                            else:
+                                self.black_clock -= elapsed
+                                if self.black_clock <= 0:
+                                    break
+
+                        if self.game_over:
+                            break
+
+                        if (side_to_move == chess.WHITE and self.white_clock <= 0) or (side_to_move == chess.BLACK and self.black_clock <= 0):
+                            self.game_over = True
+                            opp_color = not side_to_move
+                            if self.board.has_insufficient_material(opp_color):
+                                self.winner = "draw"
+                                self.result = "1/2-1/2"
+                                self.termination_reason = f"{'White' if side_to_move == chess.WHITE else 'Black'} flagged (draw vs insufficient material)"
+                            else:
+                                self.winner = "black" if side_to_move == chess.WHITE else "white"
+                                self.result = "0-1" if side_to_move == chess.WHITE else "1-0"
+                                self.termination_reason = f"{'White' if side_to_move == chess.WHITE else 'Black'} lost on time (flagged)"
+                            self.fly_state = "upset"
+                            break
+
+                        move = self._pending_human_move
                     else:
-                        self.winner = "stockfish" if is_fly_turn else "fly"
-                        self.result = "0-1" if side_to_move == chess.WHITE else "1-0"
-                        self.termination_reason = f"{'White' if side_to_move == chess.WHITE else 'Black'} lost on time (flagged)"
+                        while not self._human_event.is_set() and not self.game_over:
+                            self._human_event.wait(timeout=0.1)
+                        if self.game_over:
+                            break
+                        move = self._pending_human_move
+                    elapsed = 0.0  # already accounted for
+                else:
+                    my_c = self.white_clock if side_to_move == chess.WHITE else self.black_clock
+                    opp_c = self.black_clock if side_to_move == chess.WHITE else self.white_clock
 
-                    # Log the flagged move attempt if any
-                    record = {
-                        "ply": len(self.moves_log) + 1,
-                        "color": "white" if side_to_move == chess.WHITE else "black",
-                        "player": "fly" if is_fly_turn else "stockfish",
-                        "uci": move.uci() if move else "None",
-                        "san": self.board.san(move) if move and move in self.board.legal_moves else "??",
-                        "elapsed_ms": round(elapsed * 1000, 1),
-                        "white_clock": round(self.white_clock, 2),
-                        "black_clock": round(self.black_clock, 2),
-                        "fen_before": fen_before,
-                        "flagged": True,
-                    }
-                    self.moves_log.append(record)
-                    if on_move:
-                        on_move(record)
+                    try:
+                        if isinstance(player, StockfishPlayer) and self._engine:
+                            move = player.get_move(self.board, my_clock=my_c, opp_clock=opp_c, engine_instance=self._engine)
+                        else:
+                            move = player.get_move(self.board, my_clock=my_c, opp_clock=opp_c)
+                    except Exception as exc:
+                        import logging
+                        logging.error(
+                            "Player %s (%s) threw an exception on FEN '%s' with %d legal moves: %s",
+                            player.name,
+                            "White" if side_to_move == chess.WHITE else "Black",
+                            fen_before,
+                            len(list(self.board.legal_moves)),
+                            exc,
+                        )
+                        self.game_over = True
+                        self.winner = "black" if side_to_move == chess.WHITE else "white"
+                        self.result = "0-1" if side_to_move == chess.WHITE else "1-0"
+                        self.termination_reason = f"Player error ({player.name}): {exc}"
+                        self.fly_state = "upset"
+                        break
+
+                    elapsed = time.perf_counter() - t0
+
+                # Charge elapsed time strictly to active player
+                if self.timed and not player.is_human:
+                    if side_to_move == chess.WHITE:
+                        self.white_clock -= elapsed
+                        rem = self.white_clock
+                    else:
+                        self.black_clock -= elapsed
+                        rem = self.black_clock
+
+                    if rem <= 0:
+                        self.game_over = True
+                        opp_color = not side_to_move
+                        if self.board.has_insufficient_material(opp_color):
+                            self.winner = "draw"
+                            self.result = "1/2-1/2"
+                            self.termination_reason = f"{'White' if side_to_move == chess.WHITE else 'Black'} flagged (draw vs insufficient material)"
+                        else:
+                            self.winner = "black" if side_to_move == chess.WHITE else "white"
+                            self.result = "0-1" if side_to_move == chess.WHITE else "1-0"
+                            self.termination_reason = f"{'White' if side_to_move == chess.WHITE else 'Black'} lost on time (flagged)"
+                        self.fly_state = "upset"
+                        break
+
+                if move is None:
+                    if self.game_over:
+                        break
+                    import logging
+                    logging.error(
+                        "Player %s (%s) returned None move on FEN '%s' with %d legal moves",
+                        player.name,
+                        "White" if side_to_move == chess.WHITE else "Black",
+                        fen_before,
+                        len(list(self.board.legal_moves)),
+                    )
+                    self.game_over = True
+                    self.winner = "black" if side_to_move == chess.WHITE else "white"
+                    self.result = "0-1" if side_to_move == chess.WHITE else "1-0"
+                    self.termination_reason = f"Player error: {player.name} returned None on legal position"
+                    self.fly_state = "upset"
                     break
 
-                # Verify move legality
-                if move is None or move not in self.board.legal_moves:
+                if move not in self.board.legal_moves:
+                    import logging
+                    logging.error(
+                        "Player %s (%s) produced illegal move '%s' on FEN '%s'",
+                        player.name,
+                        "White" if side_to_move == chess.WHITE else "Black",
+                        move.uci() if hasattr(move, 'uci') else str(move),
+                        fen_before,
+                    )
                     self.game_over = True
-                    self.winner = "stockfish" if is_fly_turn else "fly"
+                    self.winner = "black" if side_to_move == chess.WHITE else "white"
                     self.result = "0-1" if side_to_move == chess.WHITE else "1-0"
-                    self.termination_reason = f"Illegal move attempted by {'fly' if is_fly_turn else 'stockfish'}: {move}"
+                    self.termination_reason = f"Illegal move: {move.uci() if hasattr(move, 'uci') else move}"
+                    self.fly_state = "upset"
                     break
 
                 san_move = self.board.san(move)
                 self.board.push(move)
+                self.last_move = move.uci()
 
-                # Add to PGN
+                if "Fly" in player.name:
+                    self.fly_state = "happy"
+
+                # Append to PGN
                 current_node = current_node.add_variation(move)
-                current_node.comment = f"[%clk {format_clock(remaining)}] [%emt {elapsed:.3f}]"
+                rem_c = self.white_clock if side_to_move == chess.WHITE else self.black_clock
+                if rem_c is not None:
+                    current_node.comment = f"[%clk {format_clock(rem_c)}] [%emt {elapsed:.3f}]"
 
                 record = {
                     "ply": len(self.moves_log) + 1,
                     "color": "white" if side_to_move == chess.WHITE else "black",
-                    "player": "fly" if is_fly_turn else "stockfish",
+                    "player": player.name,
                     "uci": move.uci(),
                     "san": san_move,
                     "elapsed_ms": round(elapsed * 1000, 1),
-                    "white_clock": round(self.white_clock, 2),
-                    "black_clock": round(self.black_clock, 2),
+                    "white_clock": round(self.white_clock, 2) if self.white_clock is not None else None,
+                    "black_clock": round(self.black_clock, 2) if self.black_clock is not None else None,
                     "fen_before": fen_before,
                     "fen_after": self.board.fen(),
                 }
                 self.moves_log.append(record)
-                if on_move:
-                    on_move(record)
 
                 # Check game termination conditions
                 if self.board.is_checkmate():
                     self.game_over = True
-                    self.winner = "fly" if is_fly_turn else "stockfish"
+                    self.winner = "white" if side_to_move == chess.WHITE else "black"
                     self.result = "1-0" if side_to_move == chess.WHITE else "0-1"
                     self.termination_reason = "Checkmate"
+                    self.fly_state = "happy" if "Fly" in player.name else "upset"
                 elif self.board.is_stalemate():
                     self.game_over = True
                     self.winner = "draw"
@@ -234,21 +365,97 @@ class BulletMatch:
                     self.result = "1/2-1/2"
                     self.termination_reason = "Fifty-move rule claim"
 
+        finally:
+            if self._engine:
+                try:
+                    self._engine.quit()
+                except Exception:
+                    pass
+
             pgn_game.headers["Result"] = self.result
             pgn_game.headers["Termination"] = self.termination_reason
+            pgn_str = str(pgn_game)
 
-            return {
+            # Persist game to disk
+            final_record = {
+                "id": self.game_id,
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "mode": "bullet" if self.timed else "analysis",
+                "white_player": self.white_player.name,
+                "black_player": self.black_player.name,
+                "initial_fen": chess.STARTING_FEN,
                 "result": self.result,
                 "winner": self.winner,
                 "termination_reason": self.termination_reason,
-                "fly_color": "white" if self.fly_color == chess.WHITE else "black",
                 "ply_count": len(self.moves_log),
-                "white_clock": round(self.white_clock, 2),
-                "black_clock": round(self.black_clock, 2),
+                "white_clock": self.white_clock,
+                "black_clock": self.black_clock,
                 "moves": self.moves_log,
-                "pgn": str(pgn_game),
-                "engine": engine_id,
-                "bot_options": self.bot_options,
+                "pgn": pgn_str,
             }
-        finally:
-            engine.quit()
+            save_game(final_record)
+
+
+class BulletMatch(ChessMatch):
+    """Backward-compatible subclass for existing CLI / tests."""
+    def __init__(self,
+                 fly_model: FlyPolicy,
+                 stockfish_path: str = "/opt/homebrew/bin/stockfish",
+                 fly_color: chess.Color = chess.WHITE,
+                 base_time: float = 60.0,
+                 increment: float = 0.0,
+                 bot_difficulty: str = "weak",
+                 bot_options: Optional[dict] = None,
+                 sample_moves: bool = False):
+        self.fly_model = fly_model
+        self.stockfish_path = stockfish_path
+        self.fly_color = fly_color
+        self.bot_difficulty = bot_difficulty
+        self.sample_moves = sample_moves
+
+        # Wrap in player instances
+        class CustomFlyPlayer(BasePlayer):
+            name = "ChessFly-Policy"
+            def __init__(self, m, sample):
+                self.m = m
+                self.sample = sample
+            def get_move(self, board, my_clock=None, opp_clock=None):
+                return self.m.choose(board, sample=self.sample, my_clock=my_clock, opp_clock=opp_clock)
+
+        fly_p = CustomFlyPlayer(fly_model, sample_moves)
+        sf_p = StockfishPlayer(stockfish_path, difficulty=bot_difficulty)
+        if bot_options:
+            sf_p.bot_options = bot_options
+
+        white_p = fly_p if fly_color == chess.WHITE else sf_p
+        black_p = sf_p if fly_color == chess.WHITE else fly_p
+
+        super().__init__(white_player=white_p, black_player=black_p,
+                         timed=True, base_time=base_time, increment=increment)
+
+    def run(self, on_move: Optional[Callable[[dict], None]] = None) -> dict:
+        self._run_loop()
+        final_record = {
+            "id": self.game_id,
+            "result": self.result,
+            "winner": "fly" if (self.winner == "white" and self.fly_color == chess.WHITE) or (self.winner == "black" and self.fly_color == chess.BLACK) else ("stockfish" if self.winner in ("white", "black") else "draw"),
+            "termination_reason": self.termination_reason,
+            "fly_color": "white" if self.fly_color == chess.WHITE else "black",
+            "ply_count": len(self.moves_log),
+            "white_clock": round(self.white_clock, 2) if self.white_clock is not None else 0.0,
+            "black_clock": round(self.black_clock, 2) if self.black_clock is not None else 0.0,
+            "moves": self.moves_log,
+            "pgn": "",
+        }
+        # Re-export PGN
+        pgn_game = chess.pgn.Game()
+        pgn_game.headers["Event"] = "ChessFly Bullet 1+0 Match"
+        pgn_game.headers["White"] = self.white_player.name
+        pgn_game.headers["Black"] = self.black_player.name
+        pgn_game.headers["Result"] = self.result
+        pgn_game.headers["Termination"] = self.termination_reason
+        node = pgn_game
+        for m in self.moves_log:
+            node = node.add_variation(chess.Move.from_uci(m["uci"]))
+        final_record["pgn"] = str(pgn_game)
+        return final_record

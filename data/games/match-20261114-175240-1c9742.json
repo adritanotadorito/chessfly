@@ -1,0 +1,16 @@
+{
+  "id": "match-20261114-175240-1c9742",
+  "timestamp": "2026-11-14T17:52:40.117356+00:00",
+  "mode": "analysis",
+  "white_player": "BrokenBot",
+  "black_player": "BrokenBot",
+  "initial_fen": "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
+  "result": "0-1",
+  "winner": "black",
+  "termination_reason": "Player error: BrokenBot returned None on legal position",
+  "ply_count": 0,
+  "white_clock": null,
+  "black_clock": null,
+  "moves": [],
+  "pgn": "[Event \"ChessFly Analysis Match\"]\n[Site \"Local Machine\"]\n[Date \"2026.11.14\"]\n[Round \"?\"]\n[White \"BrokenBot\"]\n[Black \"BrokenBot\"]\n[Result \"0-1\"]\n[TimeControl \"-\"]\n[Termination \"Player error: BrokenBot returned None on legal position\"]\n\n0-1"
+}

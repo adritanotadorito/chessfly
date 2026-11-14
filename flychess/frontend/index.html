@@ -1,0 +1,824 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ChessFly Interactive Board</title>
+<style>
+  :root {
+    --light-sq: #f0d9b5;
+    --dark-sq: #b58863;
+    --highlight-from: rgba(255, 255, 0, 0.45);
+    --highlight-to: rgba(255, 255, 0, 0.55);
+    --dest-dot: rgba(20, 85, 30, 0.5);
+    --dest-ring: rgba(200, 30, 30, 0.65);
+    --check-glow: radial-gradient(circle, rgba(255,0,0,0.8) 0%, rgba(255,0,0,0) 70%);
+    --bg-dark: #1e1e24;
+    --card-bg: #2b2b36;
+    --accent: #4ade80;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; user-select: none; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    background: transparent;
+    color: #e2e8f0;
+    overflow-x: hidden;
+  }
+  .app-container {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 20px;
+    align-items: flex-start;
+    justify-content: center;
+    padding: 10px;
+  }
+  .board-wrapper {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+  }
+  .player-bar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    width: 480px;
+    padding: 8px 14px;
+    background: #23232c;
+    border-radius: 8px;
+    border: 1px solid #383848;
+  }
+  .player-info {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .player-name {
+    font-size: 15px;
+    font-weight: 600;
+  }
+  .clock-badge {
+    font-family: "SF Mono", Menlo, Monaco, Consolas, monospace;
+    font-size: 18px;
+    font-weight: 700;
+    padding: 4px 10px;
+    background: #121217;
+    border-radius: 6px;
+    border: 1px solid #444;
+    letter-spacing: 0.5px;
+  }
+  .clock-active {
+    border-color: var(--accent);
+    color: var(--accent);
+    box-shadow: 0 0 10px rgba(74, 222, 128, 0.3);
+    animation: pulse 1s infinite alternate;
+  }
+  @keyframes pulse {
+    from { opacity: 0.85; }
+    to { opacity: 1.0; }
+  }
+  .board-container {
+    position: relative;
+    width: 480px;
+    height: 480px;
+    box-shadow: 0 12px 30px rgba(0, 0, 0, 0.5);
+    border-radius: 6px;
+    overflow: hidden;
+    cursor: default;
+  }
+  .board-grid {
+    display: grid;
+    grid-template-columns: repeat(8, 1fr);
+    grid-template-rows: repeat(8, 1fr);
+    width: 100%;
+    height: 100%;
+  }
+  .square {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .sq-light { background-color: var(--light-sq); }
+  .sq-dark { background-color: var(--dark-sq); }
+  .sq-from { background-color: var(--highlight-from) !important; }
+  .sq-to { background-color: var(--highlight-to) !important; }
+  .sq-check {
+    background: radial-gradient(circle, rgba(239, 68, 68, 0.85) 0%, rgba(239, 68, 68, 0) 75%) !important;
+  }
+  .piece {
+    width: 88%;
+    height: 88%;
+    cursor: grab;
+    z-index: 2;
+    transition: transform 0.1s ease;
+  }
+  .piece:active { cursor: grabbing; }
+  .dest-marker {
+    position: absolute;
+    width: 24%;
+    height: 24%;
+    background-color: var(--dest-dot);
+    border-radius: 50%;
+    pointer-events: none;
+    z-index: 3;
+  }
+  .dest-capture {
+    position: absolute;
+    width: 84%;
+    height: 84%;
+    border: 5px solid var(--dest-ring);
+    border-radius: 50%;
+    pointer-events: none;
+    z-index: 3;
+  }
+  .controls-bar {
+    display: flex;
+    gap: 8px;
+    margin-top: 6px;
+  }
+  .ctrl-btn {
+    background: #2b2b38;
+    color: #e2e8f0;
+    border: 1px solid #48485c;
+    border-radius: 6px;
+    padding: 6px 14px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+  .ctrl-btn:hover { background: #3d3d52; border-color: #64748b; }
+  .ctrl-btn:active { transform: scale(0.96); }
+
+  /* Side panel with Fly mascot and moves */
+  .side-panel {
+    display: flex;
+    flex-direction: column;
+    width: 320px;
+    height: 560px;
+    background: #23232c;
+    border: 1px solid #383848;
+    border-radius: 10px;
+    padding: 14px;
+    gap: 12px;
+  }
+  .mascot-card {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    background: #181820;
+    border: 1px solid #333342;
+    border-radius: 8px;
+    padding: 10px 12px;
+  }
+  .mascot-avatar {
+    width: 68px;
+    height: 68px;
+    flex-shrink: 0;
+  }
+  .mascot-details {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+  }
+  .mascot-name {
+    font-size: 14px;
+    font-weight: 700;
+    color: #4ade80;
+  }
+  .mascot-state {
+    font-size: 12px;
+    color: #94a3b8;
+  }
+  .move-list-card {
+    flex: 1;
+    background: #181820;
+    border: 1px solid #333342;
+    border-radius: 8px;
+    padding: 10px;
+    overflow-y: auto;
+    font-family: "SF Mono", Menlo, Consolas, monospace;
+    font-size: 13px;
+  }
+  .move-row {
+    display: flex;
+    padding: 4px 6px;
+    border-radius: 4px;
+    cursor: pointer;
+  }
+  .move-row:hover { background: #282836; }
+  .move-num { width: 38px; color: #64748b; }
+  .move-white, .move-black { width: 90px; }
+  .move-selected {
+    background: #3b3b4f;
+    color: #4ade80;
+    font-weight: 700;
+  }
+
+  /* Fly animations */
+  .wing-left, .wing-right {
+    transform-origin: center bottom;
+    transition: transform 0.1s;
+  }
+  .fly-idle .wing-left { animation: wing-flutter-left 3s infinite ease-in-out; }
+  .fly-idle .wing-right { animation: wing-flutter-right 3s infinite ease-in-out; }
+  .fly-thinking .wing-left { animation: wing-flutter-left 0.25s infinite ease-in-out; }
+  .fly-thinking .wing-right { animation: wing-flutter-right 0.25s infinite ease-in-out; }
+  .fly-thinking .antenna { animation: antenna-twitch 0.4s infinite alternate; }
+  .fly-happy { animation: fly-hop 0.6s infinite ease-in-out; }
+  .fly-upset .eye-pupil { display: none; }
+
+  @keyframes wing-flutter-left {
+    0%, 100% { transform: rotate(0deg); }
+    15% { transform: rotate(-25deg); }
+    30% { transform: rotate(0deg); }
+  }
+  @keyframes wing-flutter-right {
+    0%, 100% { transform: rotate(0deg); }
+    15% { transform: rotate(25deg); }
+    30% { transform: rotate(0deg); }
+  }
+  @keyframes antenna-twitch {
+    0% { transform: rotate(-8deg); }
+    100% { transform: rotate(8deg); }
+  }
+  @keyframes fly-hop {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-8px); }
+  }
+
+  /* Promotion modal */
+  .promo-modal {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    background: #1e1e28;
+    border: 2px solid var(--accent);
+    border-radius: 10px;
+    padding: 12px;
+    display: none;
+    flex-direction: column;
+    gap: 8px;
+    z-index: 100;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.8);
+  }
+  .promo-title { font-size: 13px; font-weight: 700; text-align: center; }
+  .promo-options { display: flex; gap: 8px; }
+  .promo-piece {
+    width: 48px;
+    height: 48px;
+    background: #2b2b3a;
+    border-radius: 6px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 4px;
+  }
+  .promo-piece:hover { background: #3f3f54; border: 1px solid var(--accent); }
+</style>
+</head>
+<body>
+
+<div class="app-container">
+  <!-- Board Column -->
+  <div class="board-wrapper">
+    <!-- Top Player Bar (Black) -->
+    <div class="player-bar" id="top-player-bar">
+      <div class="player-info">
+        <span style="font-size:20px;">⚫</span>
+        <span class="player-name" id="top-player-name">Stockfish</span>
+      </div>
+      <div class="clock-badge" id="top-player-clock">1:00</div>
+    </div>
+
+    <!-- Board Container -->
+    <div class="board-container" id="board-container">
+      <div class="board-grid" id="board-grid"></div>
+
+      <!-- Promotion Choice Modal -->
+      <div class="promo-modal" id="promo-modal">
+        <div class="promo-title">Choose Promotion</div>
+        <div class="promo-options" id="promo-options"></div>
+      </div>
+    </div>
+
+    <!-- Bottom Player Bar (White) -->
+    <div class="player-bar" id="bottom-player-bar">
+      <div class="player-info">
+        <span style="font-size:20px;">⚪</span>
+        <span class="player-name" id="bottom-player-name">ChessFly Policy</span>
+      </div>
+      <div class="clock-badge" id="bottom-player-clock">1:00</div>
+    </div>
+
+    <!-- Interactive Navigation Controls -->
+    <div class="controls-bar">
+      <button class="ctrl-btn" id="btn-first" title="First move">|&lt;</button>
+      <button class="ctrl-btn" id="btn-prev" title="Previous move">&lt;</button>
+      <button class="ctrl-btn" id="btn-play" title="Play/Pause">▶</button>
+      <button class="ctrl-btn" id="btn-next" title="Next move">&gt;</button>
+      <button class="ctrl-btn" id="btn-last" title="Live/Last move">&gt;|</button>
+      <button class="ctrl-btn" id="btn-flip" title="Flip board perspective">🔄 Flip</button>
+    </div>
+  </div>
+
+  <!-- Side Panel: 2D Fly Mascot + Moves -->
+  <div class="side-panel">
+    <!-- Fly Mascot Card -->
+    <div class="mascot-card">
+      <div class="mascot-avatar" id="mascot-svg-wrap">
+        <!-- Cute 2D Animated Fly SVG -->
+        <svg viewBox="0 0 100 100" class="fly-idle" id="fly-svg" width="68" height="68">
+          <!-- Wings -->
+          <ellipse class="wing-left" cx="30" cy="38" rx="22" ry="12" fill="rgba(147, 197, 253, 0.65)" stroke="#38bdf8" stroke-width="1.5" transform="rotate(-30 30 38)" />
+          <ellipse class="wing-right" cx="70" cy="38" rx="22" ry="12" fill="rgba(147, 197, 253, 0.65)" stroke="#38bdf8" stroke-width="1.5" transform="rotate(30 70 38)" />
+          <!-- Body -->
+          <ellipse cx="50" cy="62" rx="18" ry="24" fill="#2d3748" stroke="#1a202c" stroke-width="2" />
+          <line x1="36" y1="56" x2="64" y2="56" stroke="#4a5568" stroke-width="2" />
+          <line x1="34" y1="64" x2="66" y2="64" stroke="#4a5568" stroke-width="2" />
+          <line x1="36" y1="72" x2="64" y2="72" stroke="#4a5568" stroke-width="2" />
+          <!-- Head -->
+          <circle cx="50" cy="38" r="14" fill="#1a202c" />
+          <!-- Big Glossy Fly Eyes -->
+          <ellipse cx="42" cy="36" rx="7" ry="9" fill="#ef4444" />
+          <ellipse cx="58" cy="36" rx="7" ry="9" fill="#ef4444" />
+          <circle class="eye-pupil" cx="44" cy="34" r="2.5" fill="#fff" />
+          <circle class="eye-pupil" cx="60" cy="34" r="2.5" fill="#fff" />
+          <!-- Antennae -->
+          <path class="antenna" d="M 46 26 Q 42 16 34 14" stroke="#1a202c" stroke-width="2" fill="none" stroke-linecap="round" />
+          <circle cx="34" cy="14" r="2.5" fill="#4ade80" />
+          <path class="antenna" d="M 54 26 Q 58 16 66 14" stroke="#1a202c" stroke-width="2" fill="none" stroke-linecap="round" />
+          <circle cx="66" cy="14" r="2.5" fill="#4ade80" />
+          <!-- Little Bowtie -->
+          <polygon points="46,47 54,47 50,51" fill="#38bdf8" />
+          <polygon points="46,55 54,55 50,51" fill="#38bdf8" />
+          <circle cx="50" cy="51" r="2" fill="#fff" />
+        </svg>
+      </div>
+      <div class="mascot-details">
+        <div class="mascot-name">Fly Policy Mascot</div>
+        <div class="mascot-state" id="mascot-status-text">Observing position…</div>
+      </div>
+    </div>
+
+    <!-- Move List -->
+    <div class="move-list-card" id="move-list-card">
+      <div id="moves-container"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+// Component handshake state flag
+var handshakeDone = false;
+
+// Unicode Chess Piece Symbols / High-quality vectors
+const PIECES = {
+  'P': '♙', 'N': '♘', 'B': '♗', 'R': '♖', 'Q': '♕', 'K': '♔',
+  'p': '♟', 'n': '♞', 'b': '♝', 'r': '♜', 'q': '♛', 'k': '♚'
+};
+
+const SVG_PIECES = {
+  'P': 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHhtbG5zOnhsaW5rPSJodHRwOi8vd3d3LnczLm9yZy8xOTk5L3hsaW5rIiB2aWV3Qm94PSIwIDAgNDUgNDUiPjxnIGlkPSJ3aGl0ZS1wYXduIiBjbGFzcz0id2hpdGUgcGF3biI+PHBhdGggZD0iTTIyLjUgOWMtMi4yMSAwLTQgMS43OS00IDQgMCAuODkuMjkgMS43MS43OCAyLjM4QzE3LjMzIDE2LjUgMTYgMTguNTkgMTYgMjFjMCAyLjAzLjk0IDMuODQgMi40MSA1LjAzLTMgMS4wNi03LjQxIDUuNTUtNy40MSAxMy40N2gyM2MwLTcuOTItNC40MS0xMi40MS03LjQxLTEzLjQ3IDEuNDctMS4xOSAyLjQxLTMgMi40MS01LjAzIDAtMi40MS0xLjMzLTQuNS0zLjI4LTUuNjIuNDktLjY3Ljc4LTEuNDkuNzgtMi4zOCAwLTIuMjEtMS43OS00LTQtNHoiIGZpbGw9IiNmZmYiIHN0cm9rZT0iIzAwMCIgc3Ryb2tlLXdpZHRoPSIxLjUiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgLz48L2c+PC9zdmc+',
+  'N': 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHhtbG5zOnhsaW5rPSJodHRwOi8vd3d3LnczLm9yZy8xOTk5L3hsaW5rIiB2aWV3Qm94PSIwIDAgNDUgNDUiPjxnIGlkPSJ3aGl0ZS1rbmlnaHQiIGNsYXNzPSJ3aGl0ZSBrbmlnaHQiIGZpbGw9Im5vbmUiIGZpbGwtcnVsZT0iZXZlbm9kZCIgc3Ryb2tlPSIjMDAwIiBzdHJva2Utd2lkdGg9IjEuNSIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBzdHJva2UtbGluZWpvaW49InJvdW5kIj48cGF0aCBkPSJNIDIyLDEwIEMgMzIuNSwxMSAzOC41LDE4IDM4LDM5IEwgMTUsMzkgQyAxNSwzMCAyNSwzMi41IDIzLDE4IiBzdHlsZT0iZmlsbDojZmZmZmZmOyBzdHJva2U6IzAwMDAwMDsiIC8+PHBhdGggZD0iTSAyNCwxOCBDIDI0LjM4LDIwLjkxIDE4LjQ1LDI1LjM3IDE2LDI3IEMgMTMsMjkgMTMuMTgsMzEuMzQgMTEsMzEgQyA5Ljk1OCwzMC4wNiAxMi40MSwyNy45NiAxMSwyOCBDIDEwLDI4IDExLjE5LDI5LjIzIDEwLDMwIEMgOSwzMCA1Ljk5NywzMSA2LDI2IEMgNiwyNCAxMiwxNCAxMiwxNCBDIDEyLDE0IDEzLjg5LDEyLjEgMTQsMTAuNSBDIDEzLjI3LDkuNTA2IDEzLjUsOC41IDEzLjUsNy41IEMgMTQuNSw2LjUgMTYuNSwxMCAxNi41LDEwIEwgMTguNSwxMCBDIDE4LjUsMTAgMTkuMjgsOC4wMDggMjEsNyBDIDIyLDcgMjIsMTAgMjIsMTAiIHN0eWxlPSJmaWxsOiNmZmZmZmY7IHN0cm9rZTojMDAwMDAwOyIgLz48cGF0aCBkPSJNIDkuNSAyNS41IEEgMC41IDAuNSAwIDEgMSA4LjUsMjUuNSBBIDAuNSAwLjUgMCAxIDEgOS41IDI1LjUgeiIgc3R5bGU9ImZpbGw6IzAwMDAwMDsgc3Ryb2tlOiMwMDAwMDA7IiAvPjxwYXRoIGQ9Ik0gMTUgMTUuNSBBIDAuNSAxLjUgMCAxIDEgMTQsMTUuNSBBIDAuNSAxLjUgMCAxIDEgMTUgMTUuNSB6IiB0cmFuc2Zvcm09Im1hdHJpeCgwLjg2NiwwLjUsLTAuNSwwLjg2Niw5LjY5MywtNS4xNzMpIiBzdHlsZT0iZmlsbDojMDAwMDAwOyBzdHJva2U6IzAwMDAwMDsiIC8+PC9nPjwvc3ZnPg==',
+  'B': 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHhtbG5zOnhsaW5rPSJodHRwOi8vd3d3LnczLm9yZy8xOTk5L3hsaW5rIiB2aWV3Qm94PSIwIDAgNDUgNDUiPjxnIGlkPSJ3aGl0ZS1iaXNob3AiIGNsYXNzPSJ3aGl0ZSBiaXNob3AiIGZpbGw9Im5vbmUiIGZpbGwtcnVsZT0iZXZlbm9kZCIgc3Ryb2tlPSIjMDAwIiBzdHJva2Utd2lkdGg9IjEuNSIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBzdHJva2UtbGluZWpvaW49InJvdW5kIj48ZyBmaWxsPSIjZmZmIiBzdHJva2UtbGluZWNhcD0iYnV0dCI+PHBhdGggZD0iTTkgMzZjMy4zOS0uOTcgMTAuMTEuNDMgMTMuNS0yIDMuMzkgMi40MyAxMC4xMSAxLjAzIDEzLjUgMiAwIDAgMS42NS41NCAzIDItLjY4Ljk3LTEuNjUuOTktMyAuNS0zLjM5LS45Ny0xMC4xMS40Ni0xMy41LTEtMy4zOSAxLjQ2LTEwLjExLjAzLTEzLjUgMS0xLjM1NC40OS0yLjMyMy40Ny0zLS41IDEuMzU0LTEuOTQgMy0yIDMtMnpNMTUgMzJjMi41IDIuNSAxMi41IDIuNSAxNSAwIC41LTEuNSAwLTIgMC0yIDAtMi41LTIuNS00LTIuNS00IDUuNS0xLjUgNi0xMS41LTUtMTUuNS0xMSA0LTEwLjUgMTQtNSAxNS41IDAgMC0yLjUgMS41LTIuNSA0IDAgMC0uNS41IDAgMnpNMjUgOGEyLjUgMi41IDAgMSAxLTUgMCAyLjUgMi41IDAgMSAxIDUgMHoiIC8+PC9nPjxwYXRoIGQ9Ik0xNy41IDI2aDEwTTE1IDMwaDE1bS03LjUtMTQuNXY1TTIwIDE4aDUiIHN0cm9rZS1saW5lam9pbj0ibWl0ZXIiIC8+PC9nPjwvc3ZnPg==',
+  'R': 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHhtbG5zOnhsaW5rPSJodHRwOi8vd3d3LnczLm9yZy8xOTk5L3hsaW5rIiB2aWV3Qm94PSIwIDAgNDUgNDUiPjxnIGlkPSJ3aGl0ZS1yb29rIiBjbGFzcz0id2hpdGUgcm9vayIgZmlsbD0iI2ZmZiIgZmlsbC1ydWxlPSJldmVub2RkIiBzdHJva2U9IiMwMDAiIHN0cm9rZS13aWR0aD0iMS41IiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiPjxwYXRoIGQ9Ik05IDM5aDI3di0zSDl2M3pNMTIgMzZ2LTRoMjF2NEgxMnpNMTEgMTRWOWg0djJoNVY5aDV2Mmg1VjloNHY1IiBzdHJva2UtbGluZWNhcD0iYnV0dCIgLz48cGF0aCBkPSJNMzQgMTRsLTMgM0gxNGwtMy0zIiAvPjxwYXRoIGQ9Ik0zMSAxN3YxMi41SDE0VjE3IiBzdHJva2UtbGluZWNhcD0iYnV0dCIgc3Ryb2tlLWxpbmVqb2luPSJtaXRlciIgLz48cGF0aCBkPSJNMzEgMjkuNWwxLjUgMi41aC0yMGwxLjUtMi41IiAvPjxwYXRoIGQ9Ik0xMSAxNGgyMyIgZmlsbD0ibm9uZSIgc3Ryb2tlLWxpbmVqb2luPSJtaXRlciIgLz48L2c+PC9zdmc+',
+  'Q': 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHhtbG5zOnhsaW5rPSJodHRwOi8vd3d3LnczLm9yZy8xOTk5L3hsaW5rIiB2aWV3Qm94PSIwIDAgNDUgNDUiPjxnIGlkPSJ3aGl0ZS1xdWVlbiIgY2xhc3M9IndoaXRlIHF1ZWVuIiBmaWxsPSIjZmZmIiBmaWxsLXJ1bGU9ImV2ZW5vZGQiIHN0cm9rZT0iIzAwMCIgc3Ryb2tlLXdpZHRoPSIxLjUiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCI+PHBhdGggZD0iTTggMTJhMiAyIDAgMSAxLTQgMCAyIDIgMCAxIDEgNCAwek0yNC41IDcuNWEyIDIgMCAxIDEtNCAwIDIgMiAwIDEgMSA0IDB6TTQxIDEyYTIgMiAwIDEgMS00IDAgMiAyIDAgMSAxIDQgMHpNMTYgOC41YTIgMiAwIDEgMS00IDAgMiAyIDAgMSAxIDQgMHpNMzMgOWEyIDIgMCAxIDEtNCAwIDIgMiAwIDEgMSA0IDB6IiAvPjxwYXRoIGQ9Ik05IDI2YzguNS0xLjUgMjEtMS41IDI3IDBsMi0xMi03IDExVjExbC01LjUgMTMuNS0zLTE1LTMgMTUtNS41LTE0VjI1TDcgMTRsMiAxMnpNOSAyNmMwIDIgMS41IDIgMi41IDQgMSAxLjUgMSAxIC41IDMuNS0xLjUgMS0xLjUgMi41LTEuNSAyLjUtMS41IDEuNS41IDIuNS41IDIuNSA2LjUgMSAxNi41IDEgMjMgMCAwIDAgMS41LTEgMC0yLjUgMCAwIC41LTEuNS0xLTIuNS0uNS0yLjUtLjUtMiAuNS0zLjUgMS0yIDIuNS0yIDIuNS00LTguNS0xLjUtMTguNS0xLjUtMjcgMHoiIHN0cm9rZS1saW5lY2FwPSJidXR0IiAvPjxwYXRoIGQ9Ik0xMS41IDMwYzMuNS0xIDE4LjUtMSAyMiAwTTEyIDMzLjVjNi0xIDE1LTEgMjEgMCIgZmlsbD0ibm9uZSIgLz48L2c+PC9zdmc+',
+  'K': 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHhtbG5zOnhsaW5rPSJodHRwOi8vd3d3LnczLm9yZy8xOTk5L3hsaW5rIiB2aWV3Qm94PSIwIDAgNDUgNDUiPjxnIGlkPSJ3aGl0ZS1raW5nIiBjbGFzcz0id2hpdGUga2luZyIgZmlsbD0ibm9uZSIgZmlsbC1ydWxlPSJldmVub2RkIiBzdHJva2U9IiMwMDAiIHN0cm9rZS13aWR0aD0iMS41IiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiPjxwYXRoIGQ9Ik0yMi41IDExLjYzVjZNMjAgOGg1IiBzdHJva2UtbGluZWpvaW49Im1pdGVyIiAvPjxwYXRoIGQ9Ik0yMi41IDI1czQuNS03LjUgMy0xMC41YzAgMC0xLTIuNS0zLTIuNXMtMyAyLjUtMyAyLjVjLTEuNSAzIDMgMTAuNSAzIDEwLjUiIGZpbGw9IiNmZmYiIHN0cm9rZS1saW5lY2FwPSJidXR0IiBzdHJva2UtbGluZWpvaW49Im1pdGVyIiAvPjxwYXRoIGQ9Ik0xMS41IDM3YzUuNSAzLjUgMTUuNSAzLjUgMjEgMHYtN3M5LTQuNSA2LTEwLjVjLTQtNi41LTEzLjUtMy41LTE2IDRWMjd2LTMuNWMtMy41LTcuNS0xMy0xMC41LTE2LTQtMyA2IDUgMTAgNSAxMFYzN3oiIGZpbGw9IiNmZmYiIC8+PHBhdGggZD0iTTExLjUgMzBjNS41LTMgMTUuNS0zIDIxIDBtLTIxIDMuNWM1LjUtMyAxNS41LTMgMjEgMG0tMjEgMy41YzUuNS0zIDE1LjUtMyAyMSAwIiAvPjwvZz48L3N2Zz4=',
+  'p': 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHhtbG5zOnhsaW5rPSJodHRwOi8vd3d3LnczLm9yZy8xOTk5L3hsaW5rIiB2aWV3Qm94PSIwIDAgNDUgNDUiPjxnIGlkPSJibGFjay1wYXduIiBjbGFzcz0iYmxhY2sgcGF3biI+PHBhdGggZD0iTTIyLjUgOWMtMi4yMSAwLTQgMS43OS00IDQgMCAuODkuMjkgMS43MS43OCAyLjM4QzE3LjMzIDE2LjUgMTYgMTguNTkgMTYgMjFjMCAyLjAzLjk0IDMuODQgMi40MSA1LjAzLTMgMS4wNi03LjQxIDUuNTUtNy40MSAxMy40N2gyM2MwLTcuOTItNC40MS0xMi40MS03LjQxLTEzLjQ3IDEuNDctMS4xOSAyLjQxLTMgMi40MS01LjAzIDAtMi40MS0xLjMzLTQuNS0zLjI4LTUuNjIuNDktLjY3Ljc4LTEuNDkuNzgtMi4zOCAwLTIuMjEtMS43OS00LTQtNHoiIGZpbGw9IiMwMDAiIHN0cm9rZT0iIzAwMCIgc3Ryb2tlLXdpZHRoPSIxLjUiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgLz48L2c+PC9zdmc+',
+  'n': 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHhtbG5zOnhsaW5rPSJodHRwOi8vd3d3LnczLm9yZy8xOTk5L3hsaW5rIiB2aWV3Qm94PSIwIDAgNDUgNDUiPjxnIGlkPSJibGFjay1rbmlnaHQiIGNsYXNzPSJibGFjayBrbmlnaHQiIGZpbGw9Im5vbmUiIGZpbGwtcnVsZT0iZXZlbm9kZCIgc3Ryb2tlPSIjMDAwIiBzdHJva2Utd2lkdGg9IjEuNSIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBzdHJva2UtbGluZWpvaW49InJvdW5kIj48cGF0aCBkPSJNIDIyLDEwIEMgMzIuNSwxMSAzOC41LDE4IDM4LDM5IEwgMTUsMzkgQyAxNSwzMCAyNSwzMi41IDIzLDE4IiBzdHlsZT0iZmlsbDojMDAwMDAwOyBzdHJva2U6IzAwMDAwMDsiIC8+PHBhdGggZD0iTSAyNCwxOCBDIDI0LjM4LDIwLjkxIDE4LjQ1LDI1LjM3IDE2LDI3IEMgMTMsMjkgMTMuMTgsMzEuMzQgMTEsMzEgQyA5Ljk1OCwzMC4wNiAxMi40MSwyNy45NiAxMSwyOCBDIDEwLDI4IDExLjE5LDI5LjIzIDEwLDMwIEMgOSwzMCA1Ljk5NywzMSA2LDI2IEMgNiwyNCAxMiwxNCAxMiwxNCBDIDEyLDE0IDEzLjg5LDEyLjEgMTQsMTAuNSBDIDEzLjI3LDkuNTA2IDEzLjUsOC41IDEzLjUsNy41IEMgMTQuNSw2LjUgMTYuNSwxMCAxNi41LDEwIEwgMTguNSwxMCBDIDE4LjUsMTAgMTkuMjgsOC4wMDggMjEsNyBDIDIyLDcgMjIsMTAgMjIsMTAiIHN0eWxlPSJmaWxsOiMwMDAwMDA7IHN0cm9rZTojMDAwMDAwOyIgLz48cGF0aCBkPSJNIDkuNSAyNS41IEEgMC41IDAuNSAwIDEgMSA4LjUsMjUuNSBBIDAuNSAwLjUgMCAxIDEgOS41IDI1LjUgeiIgc3R5bGU9ImZpbGw6I2VjZWNlYzsgc3Ryb2tlOiNlY2VjZWM7IiAvPjxwYXRoIGQ9Ik0gMTUgMTUuNSBBIDAuNSAxLjUgMCAxIDEgMTQsMTUuNSBBIDAuNSAxLjUgMCAxIDEgMTUgMTUuNSB6IiB0cmFuc2Zvcm09Im1hdHJpeCgwLjg2NiwwLjUsLTAuNSwwLjg2Niw5LjY5MywtNS4xNzMpIiBzdHlsZT0iZmlsbDojZWNlY2VjOyBzdHJva2U6I2VjZWNlYzsiIC8+PHBhdGggZD0iTSAyNC41NSwxMC40IEwgMjQuMSwxMS44NSBMIDI0LjYsMTIgQyAyNy43NSwxMyAzMC4yNSwxNC40OSAzMi41LDE4Ljc1IEMgMzQuNzUsMjMuMDEgMzUuNzUsMjkuMDYgMzUuMjUsMzkgTCAzNS4yLDM5LjUgTCAzNy40NSwzOS41IEwgMzcuNSwzOSBDIDM4LDI4Ljk0IDM2LjYyLDIyLjE1IDM0LjI1LDE3LjY2IEMgMzEuODgsMTMuMTcgMjguNDYsMTEuMDIgMjUuMDYsMTAuNSBMIDI0LjU1LDEwLjQgeiAiIHN0eWxlPSJmaWxsOiNlY2VjZWM7IHN0cm9rZTpub25lOyIgLz48L2c+PC9zdmc+',
+  'b': 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHhtbG5zOnhsaW5rPSJodHRwOi8vd3d3LnczLm9yZy8xOTk5L3hsaW5rIiB2aWV3Qm94PSIwIDAgNDUgNDUiPjxnIGlkPSJibGFjay1iaXNob3AiIGNsYXNzPSJibGFjayBiaXNob3AiIGZpbGw9Im5vbmUiIGZpbGwtcnVsZT0iZXZlbm9kZCIgc3Ryb2tlPSIjMDAwIiBzdHJva2Utd2lkdGg9IjEuNSIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBzdHJva2UtbGluZWpvaW49InJvdW5kIj48cGF0aCBkPSJNOSAzNmMzLjM5LS45NyAxMC4xMS40MyAxMy41LTIgMy4zOSAyLjQzIDEwLjExIDEuMDMgMTMuNSAyIDAgMCAxLjY1LjU0IDMgMi0uNjguOTctMS42NS45OS0zIC41LTMuMzktLjk3LTEwLjExLjQ2LTEzLjUtMS0zLjM5IDEuNDYtMTAuMTEuMDMtMTMuNSAxLTEuMzU0LjQ5LTIuMzIzLjQ3LTMtLjUgMS4zNTQtMS45NCAzLTIgMy0yem02LTRjMi41IDIuNSAxMi41IDIuNSAxNSAwIC41LTEuNSAwLTIgMC0yIDAtMi41LTIuNS00LTIuNS00IDUuNS0xLjUgNi0xMS41LTUtMTUuNS0xMSA0LTEwLjUgMTQtNSAxNS41IDAgMC0yLjUgMS41LTIuNSA0IDAgMC0uNS41IDAgMnpNMjUgOGEyLjUgMi41IDAgMSAxLTUgMCAyLjUgMi41IDAgMSAxIDUgMHoiIGZpbGw9IiMwMDAiIHN0cm9rZS1saW5lY2FwPSJidXR0IiAvPjxwYXRoIGQ9Ik0xNy41IDI2aDEwTTE1IDMwaDE1bS03LjUtMTQuNXY1TTIwIDE4aDUiIHN0cm9rZT0iI2ZmZiIgc3Ryb2tlLWxpbmVqb2luPSJtaXRlciIgLz48L2c+PC9zdmc+',
+  'r': 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHhtbG5zOnhsaW5rPSJodHRwOi8vd3d3LnczLm9yZy8xOTk5L3hsaW5rIiB2aWV3Qm94PSIwIDAgNDUgNDUiPjxnIGlkPSJibGFjay1yb29rIiBjbGFzcz0iYmxhY2sgcm9vayIgZmlsbD0iIzAwMCIgZmlsbC1ydWxlPSJldmVub2RkIiBzdHJva2U9IiMwMDAiIHN0cm9rZS13aWR0aD0iMS41IiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiPjxwYXRoIGQ9Ik05IDM5aDI3di0zSDl2M3pNMTIuNSAzMmwxLjUtMi41aDE3bDEuNSAyLjVoLTIwek0xMiAzNnYtNGgyMXY0SDEyeiIgc3Ryb2tlLWxpbmVjYXA9ImJ1dHQiIC8+PHBhdGggZD0iTTE0IDI5LjV2LTEzaDE3djEzSDE0eiIgc3Ryb2tlLWxpbmVjYXA9ImJ1dHQiIHN0cm9rZS1saW5lam9pbj0ibWl0ZXIiIC8+PHBhdGggZD0iTTE0IDE2LjVMMTEgMTRoMjNsLTMgMi41SDE0ek0xMSAxNFY5aDR2Mmg1VjloNXYyaDVWOWg0djVIMTF6IiBzdHJva2UtbGluZWNhcD0iYnV0dCIgLz48cGF0aCBkPSJNMTIgMzUuNWgyMU0xMyAzMS41aDE5TTE0IDI5LjVoMTdNMTQgMTYuNWgxN00xMSAxNGgyMyIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjZmZmIiBzdHJva2Utd2lkdGg9IjEiIHN0cm9rZS1saW5lam9pbj0ibWl0ZXIiIC8+PC9nPjwvc3ZnPg==',
+  'q': 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHhtbG5zOnhsaW5rPSJodHRwOi8vd3d3LnczLm9yZy8xOTk5L3hsaW5rIiB2aWV3Qm94PSIwIDAgNDUgNDUiPjxnIGlkPSJibGFjay1xdWVlbiIgY2xhc3M9ImJsYWNrIHF1ZWVuIiBmaWxsPSIjMDAwIiBmaWxsLXJ1bGU9ImV2ZW5vZGQiIHN0cm9rZT0iIzAwMCIgc3Ryb2tlLXdpZHRoPSIxLjUiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCI+PGcgZmlsbD0iIzAwMCIgc3Ryb2tlPSJub25lIj48Y2lyY2xlIGN4PSI2IiBjeT0iMTIiIHI9IjIuNzUiIC8+PGNpcmNsZSBjeD0iMTQiIGN5PSI5IiByPSIyLjc1IiAvPjxjaXJjbGUgY3g9IjIyLjUiIGN5PSI4IiByPSIyLjc1IiAvPjxjaXJjbGUgY3g9IjMxIiBjeT0iOSIgcj0iMi43NSIgLz48Y2lyY2xlIGN4PSIzOSIgY3k9IjEyIiByPSIyLjc1IiAvPjwvZz48cGF0aCBkPSJNOSAyNmM4LjUtMS41IDIxLTEuNSAyNyAwbDIuNS0xMi41TDMxIDI1bC0uMy0xNC4xLTUuMiAxMy42LTMtMTQuNS0zIDE0LjUtNS4yLTEzLjZMMTQgMjUgNi41IDEzLjUgOSAyNnpNOSAyNmMwIDIgMS41IDIgMi41IDQgMSAxLjUgMSAxIC41IDMuNS0xLjUgMS0xLjUgMi41LTEuNSAyLjUtMS41IDEuNS41IDIuNS41IDIuNSA2LjUgMSAxNi41IDEgMjMgMCAwIDAgMS41LTEgMC0yLjUgMCAwIC41LTEuNS0xLTIuNS0uNS0yLjUtLjUtMiAuNS0zLjUgMS0yIDIuNS0yIDIuNS00LTguNS0xLjUtMTguNS0xLjUtMjcgMHoiIHN0cm9rZS1saW5lY2FwPSJidXR0IiAvPjxwYXRoIGQ9Ik0xMSAzOC41YTM1IDM1IDEgMCAwIDIzIDAiIGZpbGw9Im5vbmUiIHN0cm9rZS1saW5lY2FwPSJidXR0IiAvPjxwYXRoIGQ9Ik0xMSAyOWEzNSAzNSAxIDAgMSAyMyAwTTEyLjUgMzEuNWgyME0xMS41IDM0LjVhMzUgMzUgMSAwIDAgMjIgME0xMC41IDM3LjVhMzUgMzUgMSAwIDAgMjQgMCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjZmZmIiAvPjwvZz48L3N2Zz4=',
+  'k': 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHhtbG5zOnhsaW5rPSJodHRwOi8vd3d3LnczLm9yZy8xOTk5L3hsaW5rIiB2aWV3Qm94PSIwIDAgNDUgNDUiPjxnIGlkPSJibGFjay1raW5nIiBjbGFzcz0iYmxhY2sga2luZyIgZmlsbD0ibm9uZSIgZmlsbC1ydWxlPSJldmVub2RkIiBzdHJva2U9IiMwMDAiIHN0cm9rZS13aWR0aD0iMS41IiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiPjxwYXRoIGQ9Ik0yMi41IDExLjYzVjYiIHN0cm9rZS1saW5lam9pbj0ibWl0ZXIiIC8+PHBhdGggZD0iTTIyLjUgMjVzNC41LTcuNSAzLTEwLjVjMCAwLTEtMi41LTMtMi41cy0zIDIuNS0zIDIuNWMtMS41IDMgMyAxMC41IDMgMTAuNSIgZmlsbD0iIzAwMCIgc3Ryb2tlLWxpbmVjYXA9ImJ1dHQiIHN0cm9rZS1saW5lam9pbj0ibWl0ZXIiIC8+PHBhdGggZD0iTTExLjUgMzdjNS41IDMuNSAxNS41IDMuNSAyMSAwdi03czktNC41IDYtMTAuNWMtNC02LjUtMTMuNS0zLjUtMTYgNFYyN3YtMy41Yy0zLjUtNy41LTEzLTEwLjUtMTYtNC0zIDYgNSAxMCA1IDEwVjM3eiIgZmlsbD0iIzAwMCIgLz48cGF0aCBkPSJNMjAgOGg1IiBzdHJva2UtbGluZWpvaW49Im1pdGVyIiAvPjxwYXRoIGQ9Ik0zMiAyOS41czguNS00IDYuMDMtOS42NUMzNC4xNSAxNCAyNSAxOCAyMi41IDI0LjVsLjAxIDIuMS0uMDEtMi4xQzIwIDE4IDkuOTA2IDE0IDYuOTk3IDE5Ljg1Yy0yLjQ5NyA1LjY1IDQuODUzIDkgNC44NTMgOU0xMS41IDMwYzUuNS0zIDE1LjUtMyAyMSAwbS0yMSAzLjVjNS41LTMgMTUuNS0zIDIxIDBtLTIxIDMuNWM1LjUtMyAxNS41LTMgMjEgMCIgc3Ryb2tlPSIjZmZmIiAvPjwvZz48L3N2Zz4=',
+};
+
+
+let currentFEN = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
+let legalMoves = [];
+let orientation = "white"; // "white" or "black"
+let selectedSquare = null;
+let lastMove = null;
+let pendingPromotion = null;
+let autoplayTimer = null;
+
+let gameHistory = [];
+let currentPly = 0;
+let isHumanTurn = false;
+
+// Streamlit Component Protocol Handshake and Communication
+function sendStreamlitMessage(type, data) {
+  const payload = Object.assign({
+    isStreamlitMessage: true,
+    type: type
+  }, data || {});
+  window.parent.postMessage(payload, "*");
+}
+
+function notifyComponentReady() {
+  sendStreamlitMessage("streamlit:componentReady", { apiVersion: 1 });
+  updateFrameHeight();
+}
+
+function updateFrameHeight() {
+  const h = Math.max(620, document.body.scrollHeight || 620);
+  sendStreamlitMessage("streamlit:setFrameHeight", { height: h });
+}
+
+function sendToStreamlit(data) {
+  sendStreamlitMessage("streamlit:setComponentValue", { value: data });
+}
+
+function parseFEN(fen) {
+  const parts = fen.split(' ');
+  const rows = parts[0].split('/');
+  const board = [];
+  for (let r = 0; r < 8; r++) {
+    const row = [];
+    for (let char of rows[r]) {
+      if (char >= '1' && char <= '8') {
+        const emptyCount = parseInt(char);
+        for (let e = 0; e < emptyCount; e++) row.push(null);
+      } else {
+        row.push(char);
+      }
+    }
+    board.push(row);
+  }
+  return {
+    board: board,
+    turn: parts[1] || 'w',
+    castling: parts[2] || '-',
+    enPassant: parts[3] || '-'
+  };
+}
+
+function squareToCoord(square) {
+  const file = square.charCodeAt(0) - 'a'.charCodeAt(0);
+  const rank = 8 - parseInt(square[1]);
+  return { file, rank };
+}
+
+function coordToSquare(file, rank) {
+  const f = String.fromCharCode('a'.charCodeAt(0) + file);
+  const r = 8 - rank;
+  return `${f}${r}`;
+}
+
+function renderBoard() {
+  const grid = document.getElementById("board-grid");
+  grid.innerHTML = "";
+  const parsed = parseFEN(currentFEN);
+
+  const startRank = orientation === "white" ? 0 : 7;
+  const endRank = orientation === "white" ? 8 : -1;
+  const stepRank = orientation === "white" ? 1 : -1;
+
+  const startFile = orientation === "white" ? 0 : 7;
+  const endFile = orientation === "white" ? 8 : -1;
+  const stepFile = orientation === "white" ? 1 : -1;
+
+  for (let r = startRank; r !== endRank; r += stepRank) {
+    for (let f = startFile; f !== endFile; f += stepFile) {
+      const sqName = coordToSquare(f, r);
+      const isLight = (f + r) % 2 === 0;
+      const piece = parsed.board[r][f];
+
+      const sqDiv = document.createElement("div");
+      sqDiv.className = `square ${isLight ? "sq-light" : "sq-dark"}`;
+      sqDiv.dataset.square = sqName;
+
+      // Last move highlight
+      if (lastMove && (lastMove.slice(0,2) === sqName || lastMove.slice(2,4) === sqName)) {
+        sqDiv.classList.add(lastMove.slice(0,2) === sqName ? "sq-from" : "sq-to");
+      }
+
+      // Check highlight
+      if (piece && piece.toLowerCase() === 'k') {
+        const isWhiteKing = piece === 'K';
+        if ((isWhiteKing && parsed.turn === 'w') || (!isWhiteKing && parsed.turn === 'b')) {
+          // If in check
+          if (window.currentInCheck) {
+            sqDiv.classList.add("sq-check");
+          }
+        }
+      }
+
+      // Render piece
+      if (piece) {
+        const img = document.createElement("img");
+        img.className = "piece";
+        img.src = SVG_PIECES[piece];
+        img.draggable = isHumanTurn;
+        img.dataset.piece = piece;
+        img.dataset.square = sqName;
+
+        img.onerror = function() {
+          const span = document.createElement("span");
+          span.textContent = PIECES[piece] || piece;
+          span.style.fontSize = "38px";
+          span.style.lineHeight = "1";
+          span.style.cursor = isHumanTurn ? "grab" : "default";
+          span.style.color = (piece === piece.toUpperCase()) ? "#ffffff" : "#111111";
+          span.style.textShadow = (piece === piece.toUpperCase()) ? "0 0 2px #000, 0 0 1px #000" : "0 0 2px #fff";
+          if (img.parentNode) {
+            img.parentNode.replaceChild(span, img);
+          }
+        };
+
+        img.addEventListener("dragstart", (e) => {
+          if (!isHumanTurn) return;
+          e.dataTransfer.setData("text/plain", sqName);
+          selectSquare(sqName);
+        });
+
+        sqDiv.appendChild(img);
+      }
+
+      // Legal move destinations for selected square
+      if (selectedSquare) {
+        const targets = legalMoves
+          .filter(m => m.startsWith(selectedSquare))
+          .map(m => m.slice(2, 4));
+
+        if (targets.includes(sqName)) {
+          if (piece) {
+            const cap = document.createElement("div");
+            cap.className = "dest-capture";
+            sqDiv.appendChild(cap);
+          } else {
+            const dot = document.createElement("div");
+            dot.className = "dest-marker";
+            sqDiv.appendChild(dot);
+          }
+        }
+      }
+
+      // Square interactions (click & drag)
+      sqDiv.addEventListener("click", () => handleSquareClick(sqName));
+
+      sqDiv.addEventListener("dragover", (e) => {
+        e.preventDefault();
+      });
+
+      sqDiv.addEventListener("drop", (e) => {
+        e.preventDefault();
+        const fromSq = e.dataTransfer.getData("text/plain");
+        if (fromSq && fromSq !== sqName) {
+          attemptMove(fromSq, sqName);
+        }
+      });
+
+      grid.appendChild(sqDiv);
+    }
+  }
+}
+
+function selectSquare(sq) {
+  selectedSquare = sq;
+  renderBoard();
+}
+
+function handleSquareClick(sq) {
+  if (!isHumanTurn) return;
+  if (selectedSquare === sq) {
+    selectedSquare = null;
+    renderBoard();
+    return;
+  }
+  if (selectedSquare) {
+    const isTarget = legalMoves.some(m => m.startsWith(selectedSquare + sq));
+    if (isTarget) {
+      attemptMove(selectedSquare, sq);
+      return;
+    }
+  }
+  // Select new square if it contains a friendly piece
+  const parsed = parseFEN(currentFEN);
+  const coord = squareToCoord(sq);
+  const piece = parsed.board[coord.rank][coord.file];
+  if (piece) {
+    const isWhite = piece === piece.toUpperCase();
+    if ((isWhite && parsed.turn === 'w') || (!isWhite && parsed.turn === 'b')) {
+      selectSquare(sq);
+      return;
+    }
+  }
+  selectedSquare = null;
+  renderBoard();
+}
+
+function attemptMove(fromSq, toSq) {
+  selectedSquare = null;
+  const promoCandidates = legalMoves.filter(m => m.startsWith(fromSq + toSq) && m.length === 5);
+  if (promoCandidates.length > 0) {
+    // Show promotion dialog
+    pendingPromotion = { from: fromSq, to: toSq };
+    showPromotionModal(fromSq[1] === '7' ? 'w' : 'b');
+    return;
+  }
+  const matchingMove = legalMoves.find(m => m === fromSq + toSq);
+  if (matchingMove) {
+    executeMove(matchingMove);
+  } else {
+    renderBoard();
+  }
+}
+
+function showPromotionModal(color) {
+  const modal = document.getElementById("promo-modal");
+  const options = document.getElementById("promo-options");
+  options.innerHTML = "";
+  const pieceLetters = ['q', 'r', 'b', 'n'];
+
+  pieceLetters.forEach(p => {
+    const pKey = color === 'w' ? p.toUpperCase() : p;
+    const btn = document.createElement("div");
+    btn.className = "promo-piece";
+    const img = document.createElement("img");
+    img.src = SVG_PIECES[pKey];
+    img.style.width = "36px";
+    img.style.height = "36px";
+    img.onerror = function() {
+      const span = document.createElement("span");
+      span.textContent = PIECES[pKey] || pKey;
+      span.style.fontSize = "28px";
+      span.style.color = (pKey === pKey.toUpperCase()) ? "#ffffff" : "#111111";
+      if (img.parentNode) {
+        img.parentNode.replaceChild(span, img);
+      }
+    };
+    btn.appendChild(img);
+
+    btn.addEventListener("click", () => {
+      modal.style.display = "none";
+      if (pendingPromotion) {
+        const uci = `${pendingPromotion.from}${pendingPromotion.to}${p}`;
+        pendingPromotion = null;
+        executeMove(uci);
+      }
+    });
+    options.appendChild(btn);
+  });
+  modal.style.display = "flex";
+}
+
+function executeMove(uci) {
+  sendToStreamlit({ type: "user_move", uci: uci });
+}
+
+function updateMascot(state, message) {
+  const svg = document.getElementById("fly-svg");
+  const status = document.getElementById("mascot-status-text");
+  svg.className = `fly-${state}`;
+  if (message) {
+    status.innerText = message;
+  }
+}
+
+function renderMoveList() {
+  const container = document.getElementById("moves-container");
+  container.innerHTML = "";
+  for (let i = 0; i < gameHistory.length; i += 2) {
+    const row = document.createElement("div");
+    row.className = "move-row";
+
+    const moveNum = (i / 2) + 1;
+    const numSpan = document.createElement("span");
+    numSpan.className = "move-num";
+    numSpan.innerText = `${moveNum}.`;
+    row.appendChild(numSpan);
+
+    const whiteMove = gameHistory[i];
+    const wSpan = document.createElement("span");
+    wSpan.className = `move-white ${currentPly === i + 1 ? 'move-selected' : ''}`;
+    wSpan.innerText = whiteMove ? whiteMove.san : "";
+    wSpan.addEventListener("click", () => selectPly(i + 1));
+    row.appendChild(wSpan);
+
+    if (i + 1 < gameHistory.length) {
+      const blackMove = gameHistory[i + 1];
+      const bSpan = document.createElement("span");
+      bSpan.className = `move-black ${currentPly === i + 2 ? 'move-selected' : ''}`;
+      bSpan.innerText = blackMove.san;
+      bSpan.addEventListener("click", () => selectPly(i + 2));
+      row.appendChild(bSpan);
+    }
+    container.appendChild(row);
+  }
+  // Auto-scroll to selected row
+  const activeEl = container.querySelector(".move-selected");
+  if (activeEl) {
+    activeEl.scrollIntoView({ block: "nearest", behavior: "smooth" });
+  }
+}
+
+function selectPly(ply) {
+  sendToStreamlit({ type: "select_ply", ply: ply });
+}
+
+// Navigation Controls
+document.getElementById("btn-first").addEventListener("click", () => selectPly(0));
+document.getElementById("btn-prev").addEventListener("click", () => selectPly(Math.max(0, currentPly - 1)));
+document.getElementById("btn-next").addEventListener("click", () => selectPly(Math.min(gameHistory.length, currentPly + 1)));
+document.getElementById("btn-last").addEventListener("click", () => selectPly(gameHistory.length));
+document.getElementById("btn-flip").addEventListener("click", () => {
+  orientation = orientation === "white" ? "black" : "white";
+  renderBoard();
+});
+
+document.getElementById("btn-play").addEventListener("click", () => {
+  const btn = document.getElementById("btn-play");
+  if (autoplayTimer) {
+    clearInterval(autoplayTimer);
+    autoplayTimer = null;
+    btn.innerText = "▶";
+  } else {
+    btn.innerText = "⏸";
+    autoplayTimer = setInterval(() => {
+      if (currentPly < gameHistory.length) {
+        selectPly(currentPly + 1);
+      } else {
+        clearInterval(autoplayTimer);
+        autoplayTimer = null;
+        btn.innerText = "▶";
+      }
+    }, 900);
+  }
+});
+
+// Streamlit Render Message Listener
+window.addEventListener("message", function(event) {
+  if (event.data && event.data.type === "streamlit:render") {
+    handshakeDone = true;
+    const args = event.data.args || {};
+    if (args.fen) currentFEN = args.fen;
+    if (args.legal_moves) legalMoves = args.legal_moves;
+    if (args.last_move) lastMove = args.last_move;
+    if (args.orientation) orientation = args.orientation;
+    if (args.is_human_turn !== undefined) isHumanTurn = args.is_human_turn;
+
+    if (args.white_player) document.getElementById("bottom-player-name").innerText = args.white_player;
+    if (args.black_player) document.getElementById("top-player-name").innerText = args.black_player;
+
+    const wClock = document.getElementById("bottom-player-clock");
+    const bClock = document.getElementById("top-player-clock");
+    if (args.formatted_white_clock) wClock.innerText = args.formatted_white_clock;
+    if (args.formatted_black_clock) bClock.innerText = args.formatted_black_clock;
+
+    // Pulse active clock
+    wClock.classList.toggle("clock-active", args.turn === "white" && !args.is_game_over);
+    bClock.classList.toggle("clock-active", args.turn === "black" && !args.is_game_over);
+
+    if (args.fly_state) {
+      const msgs = {
+        "idle": "Observing position…",
+        "thinking": "Calculating biological recurrent flows…",
+        "happy": "Move executed with positive potential!",
+        "upset": "Position collapsed or flagged."
+      };
+      updateMascot(args.fly_state, msgs[args.fly_state]);
+    }
+
+    if (args.moves) {
+      gameHistory = args.moves;
+    }
+    currentPly = args.ply !== undefined ? args.ply : gameHistory.length;
+
+    renderBoard();
+    renderMoveList();
+
+    // Adjust Streamlit iframe height automatically
+    const height = document.body.scrollHeight || 600;
+    window.parent.postMessage({
+      isStreamlitMessage: true,
+      type: "streamlit:setFrameHeight",
+      height: Math.max(590, height)
+    }, "*");
+  }
+});
+
+// Initial render
+renderBoard();
+updateFrameHeight();
+
+// Initial handshake with Streamlit parent window
+notifyComponentReady();
+
+// Repeat handshake briefly until first render message is received
+const handshakeInterval = setInterval(() => {
+  if (handshakeDone) {
+    clearInterval(handshakeInterval);
+  } else {
+    notifyComponentReady();
+  }
+}, 150);
+setTimeout(() => clearInterval(handshakeInterval), 3000);
+</script>
+</body>
+</html>

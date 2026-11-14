@@ -1,0 +1,16 @@
+{
+  "id": "match-20261114-161304-125eb3",
+  "timestamp": "2026-11-14T16:14:04.914858+00:00",
+  "mode": "bullet",
+  "white_player": "Human",
+  "black_player": "Fly Policy (RL Bullet)",
+  "initial_fen": "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
+  "result": "0-1",
+  "winner": "black",
+  "termination_reason": "Illegal move: None",
+  "ply_count": 0,
+  "white_clock": -0.054670917001203634,
+  "black_clock": 60.0,
+  "moves": [],
+  "pgn": "[Event \"ChessFly 1+0 Bullet Match\"]\n[Site \"Local Machine\"]\n[Date \"2026.11.14\"]\n[Round \"?\"]\n[White \"Human\"]\n[Black \"Fly Policy (RL Bullet)\"]\n[Result \"0-1\"]\n[TimeControl \"60+0\"]\n[Termination \"Illegal move: None\"]\n\n0-1"
+}
