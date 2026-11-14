@@ -227,6 +227,39 @@ class BulletAndRewardTests(unittest.TestCase):
             if old_google:
                 os.environ["GOOGLE_API_KEY"] = old_google
 
+    def test_transparent_feature_weights_and_exchanges(self):
+        from flychess.reward import FEATURE_WEIGHTS, evaluate_exchanges
+        self.assertAlmostEqual(sum(FEATURE_WEIGHTS.values()), 1.0)
+        
+        # Test exchange evaluation:
+        # Position where White Queen attacks defended Black Knight (e.g. Knight on e5 defended by pawn d6)
+        b = chess.Board("rnbqkbnr/ppp2ppp/3p4/4p3/4Q3/8/PPPPPPPP/RNB1KBNR w KQkq - 0 1")
+        # Defended pawn on e5 attacked by Queen on e4
+        inflicted, suffered = evaluate_exchanges(b, chess.WHITE)
+        # Queen taking defended pawn is a losing exchange, so inflicted favorable threats should be 0.0
+        self.assertEqual(inflicted, 0.0)
+
+        # Now White pawn attacks undefended Black Knight:
+        b_win = chess.Board("r1bqkbnr/pppppppp/2n5/4P3/8/8/PPPP1PPP/RNBQKBNR w KQkq - 0 1")
+        # Pawn on e5 attacks knight on c6? No, e5 attacks d6/f6. Let's make direct attack:
+        b_win = chess.Board("r1bqkbnr/pppp1ppp/2n5/1B2p3/4P3/5N2/PPPP1PPP/RNBQK2R b KQkq - 3 3")
+        # Bishop b5 attacks knight c6. Knight c6 is defended by b7/d7 pawns.
+        # Undefended piece test:
+        b_free = chess.Board("r1bqkb1r/pppp1ppp/8/4n3/4Q3/8/PPPPPPPP/RNB1KBNR w KQkq - 0 1")
+        # White Queen on e4 pins/attacks undefended Knight on e5
+        inflicted_free, _ = evaluate_exchanges(b_free, chess.WHITE)
+        self.assertGreaterEqual(inflicted_free, 3.1)
+
+        # Check normalization bounds
+        f = features(b_free, chess.WHITE)
+        for k, v in f["normalized"].items():
+            self.assertGreaterEqual(v, -1.0)
+            self.assertLessEqual(v, 1.0)
+        phi = potential(b_free, chess.WHITE)
+        self.assertGreater(phi, -1.0)
+        self.assertLess(phi, 1.0)
+
+
 
 if __name__ == "__main__":
     unittest.main()

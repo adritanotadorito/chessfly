@@ -1,0 +1,161 @@
+{
+  "RL Fly": {
+    "num_games": 4,
+    "wins": 0,
+    "draws": 0,
+    "losses": 4,
+    "win_rate": 0.0,
+    "flags_lost": 0,
+    "avg_plies": 47.5,
+    "avg_clock_used_s": 0.0,
+    "mean_acpl": 394.1,
+    "games": [
+      {
+        "game": 1,
+        "fly_color": "white",
+        "result": "0-1",
+        "winner": "stockfish",
+        "termination": "Checkmate",
+        "plies": 42,
+        "clock_used_s": 0.0,
+        "acpl": 501.0
+      },
+      {
+        "game": 2,
+        "fly_color": "black",
+        "result": "1-0",
+        "winner": "stockfish",
+        "termination": "Checkmate",
+        "plies": 33,
+        "clock_used_s": 0.0,
+        "acpl": 428.6
+      },
+      {
+        "game": 3,
+        "fly_color": "white",
+        "result": "0-1",
+        "winner": "stockfish",
+        "termination": "Checkmate",
+        "plies": 62,
+        "clock_used_s": 0.01,
+        "acpl": 394.5
+      },
+      {
+        "game": 4,
+        "fly_color": "black",
+        "result": "1-0",
+        "winner": "stockfish",
+        "termination": "Checkmate",
+        "plies": 53,
+        "clock_used_s": 0.01,
+        "acpl": 252.5
+      }
+    ]
+  },
+  "Shuffled RL": {
+    "num_games": 4,
+    "wins": 0,
+    "draws": 1,
+    "losses": 3,
+    "win_rate": 0.0,
+    "flags_lost": 0,
+    "avg_plies": 41.8,
+    "avg_clock_used_s": 0.0,
+    "mean_acpl": 416.4,
+    "games": [
+      {
+        "game": 1,
+        "fly_color": "white",
+        "result": "0-1",
+        "winner": "stockfish",
+        "termination": "Checkmate",
+        "plies": 38,
+        "clock_used_s": 0.01,
+        "acpl": 524.6
+      },
+      {
+        "game": 2,
+        "fly_color": "black",
+        "result": "1-0",
+        "winner": "stockfish",
+        "termination": "Checkmate",
+        "plies": 49,
+        "clock_used_s": 0.01,
+        "acpl": 540.9
+      },
+      {
+        "game": 3,
+        "fly_color": "white",
+        "result": "0-1",
+        "winner": "stockfish",
+        "termination": "Checkmate",
+        "plies": 44,
+        "clock_used_s": 0.0,
+        "acpl": 490.7
+      },
+      {
+        "game": 4,
+        "fly_color": "black",
+        "result": "1/2-1/2",
+        "winner": "draw",
+        "termination": "Threefold repetition claim",
+        "plies": 36,
+        "clock_used_s": 0.0,
+        "acpl": 109.5
+      }
+    ]
+  },
+  "New SFT Fly": {
+    "num_games": 4,
+    "wins": 0,
+    "draws": 0,
+    "losses": 4,
+    "win_rate": 0.0,
+    "flags_lost": 0,
+    "avg_plies": 38.0,
+    "avg_clock_used_s": 0.0,
+    "mean_acpl": 649.6,
+    "games": [
+      {
+        "game": 1,
+        "fly_color": "white",
+        "result": "0-1",
+        "winner": "stockfish",
+        "termination": "Checkmate",
+        "plies": 60,
+        "clock_used_s": 0.01,
+        "acpl": 403.8
+      },
+      {
+        "game": 2,
+        "fly_color": "black",
+        "result": "1-0",
+        "winner": "stockfish",
+        "termination": "Checkmate",
+        "plies": 27,
+        "clock_used_s": 0.0,
+        "acpl": 806.1
+      },
+      {
+        "game": 3,
+        "fly_color": "white",
+        "result": "0-1",
+        "winner": "stockfish",
+        "termination": "Checkmate",
+        "plies": 32,
+        "clock_used_s": 0.0,
+        "acpl": 704.4
+      },
+      {
+        "game": 4,
+        "fly_color": "black",
+        "result": "1-0",
+        "winner": "stockfish",
+        "termination": "Checkmate",
+        "plies": 33,
+        "clock_used_s": 0.0,
+        "acpl": 684.1
+      }
+    ]
+  }
+}

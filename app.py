@@ -55,11 +55,23 @@ def create_player(choice_key: str, custom_name: str = None):
     """Instantiate player object from UI selection."""
     if choice_key == "human":
         return HumanPlayer()
+    elif choice_key == "fly_rl_pilot":
+        ckpt = ROOT / "outputs" / "fly-rl-pilot.npz"
+        return FlyPolicyPlayer(str(ckpt), str(GRAPH_PATH), name=custom_name or "Fly Policy (RL Pilot · Actor-Critic)")
+    elif choice_key == "fly_sft_2k":
+        ckpt = ROOT / "outputs" / "fly-supervised-2k.npz"
+        return FlyPolicyPlayer(str(ckpt), str(GRAPH_PATH), name=custom_name or "Fly Policy (2k SFT · Oct-Validated)")
     elif choice_key == "fly_rl":
         ckpt = FLY_RL_CKPT if FLY_RL_CKPT.is_file() else FLY_SFT_CKPT
         return FlyPolicyPlayer(str(ckpt), str(GRAPH_PATH), name=custom_name or "Fly Policy (RL Bullet)")
     elif choice_key == "fly_sft":
         return FlyPolicyPlayer(str(FLY_SFT_CKPT), str(GRAPH_PATH), name=custom_name or "Fly Policy (Pre-RL SFT)")
+    elif choice_key == "shuf_sft_2k":
+        ckpt = ROOT / "outputs" / "shuffled-supervised-2k.npz"
+        return FlyPolicyPlayer(str(ckpt), str(GRAPH_PATH), name=custom_name or "Shuffled Control (2k SFT)", shuffled=True)
+    elif choice_key == "shuf_rl_pilot":
+        ckpt = ROOT / "outputs" / "shuffled-rl-pilot.npz"
+        return FlyPolicyPlayer(str(ckpt), str(GRAPH_PATH), name=custom_name or "Shuffled Control (RL Pilot)", shuffled=True)
     elif choice_key == "shuffled":
         ckpt = SHUF_RL_CKPT if SHUF_RL_CKPT.is_file() else SHUF_SFT_CKPT
         return FlyPolicyPlayer(str(ckpt), str(GRAPH_PATH), name=custom_name or "Shuffled Control", shuffled=True)
@@ -110,9 +122,13 @@ with tab_play:
         c_p1, c_p2, c_p3 = st.columns(3)
         player_options = {
             "human": "🧑 Human (You)",
-            "fly_rl": "🪰 Fly Policy (After RL)",
-            "fly_sft": "🪰 Fly Policy (Before RL / SFT)",
-            "shuffled": "🔀 Shuffled-Wiring Control",
+            "fly_rl_pilot": "🪰 Fly Policy (RL Pilot · Actor-Critic)",
+            "fly_sft_2k": "🪰 Fly Policy (2k SFT · Oct-Validated)",
+            "fly_rl": "🪰 Fly Policy (Previous RL Bullet)",
+            "fly_sft": "🪰 Fly Policy (Previous 200-SFT)",
+            "shuf_sft_2k": "🔀 Shuffled Control (2k SFT)",
+            "shuf_rl_pilot": "🔀 Shuffled Control (RL Pilot)",
+            "shuffled": "🔀 Shuffled Control (Previous)",
             "stockfish_weak": "🤖 Stockfish (Weak · Elo 1350)",
             "stockfish_medium": "🤖 Stockfish (Medium · Elo 1600)",
             "stockfish_strong": "🤖 Stockfish (Strong · Skill 20)",
@@ -521,6 +537,34 @@ with tab_rl:
             except Exception as exc:
                 st.error(f"Error during bullet evaluation: {exc}")
 
+    st.divider()
+    st.markdown("#### 🎯 Frozen November Benchmark Evaluation (120 Positions)")
+    st.caption("Strictly held-out, frozen test set from November 2013 Lichess standard games (100 representative + 20 tactical challenge positions).")
+
+    bench_rep_file = ROOT / "outputs" / "november_benchmark_evaluation_report.json"
+    if bench_rep_file.is_file():
+        try:
+            with open(bench_rep_file) as f:
+                b_report = json.load(f)
+            b_rows = []
+            for m_name, m_val in b_report.items():
+                bm = m_val["benchmark"]
+                tac = bm["tactical_challenge"]
+                b_rows.append({
+                    "Model": m_name,
+                    "Legal Moves": f"{bm['legal_rate']*100:.1f}%",
+                    "ACPL": f"{bm['mean_acpl']:.1f} cp",
+                    "Median CPL": f"{bm['median_cpl']:.1f} cp",
+                    "Blunders (>300cp)": f"{bm['blunder_rate']*100:.1f}%",
+                    "Acceptable (<=50cp)": f"{bm['acceptable_move_rate']*100:.1f}%",
+                    "Top-1 Accuracy": f"{bm['top1_accuracy']*100:.1f}%",
+                    "Tactical Top-1": f"{tac['top1_accuracy']*100:.1f}%",
+                    "Value MSE": f"{bm['value_mse']:.4f}",
+                })
+            st.dataframe(b_rows, hide_index=True)
+        except Exception as e:
+            st.error(f"Error loading benchmark report: {e}")
+
 # ==============================================================================
 # TAB 4: SFT / MOVE IMITATION
 # ==============================================================================
@@ -615,11 +659,27 @@ with tab_about:
     ### Why the Shuffled Control Matters
     To test whether the specific biological wiring diagram confers an inductive bias for chess representation, we construct a degree-preserving randomized graph with identical in-degree and out-degree distributions and normalized synaptic weight scales.
 
-    ### Reward-Based RL Formulation
-    - **State-Dependent Potential**: $\\Phi(s, c) = \\tanh(w^\\top f(s, c) / 6.0) \\in (-1, 1)$.
-    - **Intermediate Transition Reward**: $\\Delta \\Phi_t = 0.15 \\times (0.99 \\Phi(s_{t+1}) - \\Phi(s_t))$.
-    - **Stockfish Regret Penalty**: Bounded at $\\le 0.10$ per game.
-    - **Terminal Dominance**: $R_{\\text{terminal}} \\in \\{+1.0, 0.0, -1.0\\}$ guarantees that winning or losing the game dominates intermediate feature shaping.
+    ### Transparent Reward-Based Formulation
+    - **6 Configurable Sub-Scores (Sum = 1.0)**:
+      1. *Material Balance* ($w = 0.28$): $\tanh(\Delta M / 4.0) \in (-1, 1)$.
+      2. *Safe Piece Activity* ($w = 0.12$): Mobility excluding squares attacked by enemy pawns or lesser pieces.
+      3. *Coordination & Defended Pieces* ($w = 0.08$): Fraction of friendly pieces defended by other pieces.
+      4. *Opponent Threats & Counterplay* ($w = 0.20$): Rigorous exchange evaluation where capturing defended pieces with higher-value pieces registers as negative, winning undefended pieces registers positively, and equal trades register neutrally.
+      5. *Pawn Structure* ($w = 0.12$): Passed pawn advancement bonus minus doubled and isolated pawn penalties.
+      6. *King Safety & Centralization* ($w = 0.20$): Game-phase blended ($\rho = \text{npm}/32$) between middlegame pawn shelter/open-file danger and endgame king centralization.
+    - **State-Dependent Potential**: $\Phi(s, c) = \sum_{k} w_k \hat{f}_k(s, c) \in (-1, 1)$.
+    - **Intermediate Transition Reward**: Evaluated after opponent reply: $\Delta \Phi_t = 0.15 \times (0.99 \Phi(s_{t+1}) - \Phi(s_t))$.
+    - **Bounded Regret Penalty**: $0.0$ for loss $\le 20$ cp, up to $-0.05$ for small inaccuracy, $-0.05$ to $-0.20$ for mistakes, and $-0.20$ to $-0.50$ for tactical blunders.
+    - **Terminal Dominance**: $R_{\text{terminal}} \in \{+1.0, 0.0, -1.0\}$.
+
+    ### Advantage Actor-Critic (A2C)
+    A value head $V(s) = \tanh(W_v x + b_v)$ on the 256 biological neurons computes state value estimates. Advantage $A_t = G_t - V(s_t)$ scales policy updates while value MSE backpropagates through biological recurrence, directly tuning the 396 FlyWire edge gains $g_e$.
+
+    ### Strict Split Methodology
+    - **Training Split**: January–September 2013 Lichess standard games (filtered $\ge 1500$ Elo, normal termination, FEN deduplication).
+    - **Validation Split**: October 2013 games for checkpoint selection and early stopping.
+    - **Frozen Benchmark**: November 2013 games (100 representative + 20 tactical challenge positions) strictly frozen for final evaluation.
+
     """)
 
     if GRAPH_PATH.is_file():

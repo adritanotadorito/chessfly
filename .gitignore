@@ -1,6 +1,9 @@
 
 /data/upstream/
 /data/lichess/
+/data/training/
+/data/bulk/
+/data/games/
 __pycache__/
 *.pyc
 .env

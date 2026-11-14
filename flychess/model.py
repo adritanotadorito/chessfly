@@ -1,6 +1,7 @@
 """Small NumPy policy. Every trainable recurrent edge belongs to the fixed graph.
 
-The dense board adapter and move readout are engineered; they are not fly neurons.
+The dense board adapter, move readout, and value head are engineered; they are not fly neurons.
+The recurrent biological message-passing updates 396 FlyWire edge gains.
 """
 import json
 from pathlib import Path
@@ -24,6 +25,8 @@ class FlyPolicy:
             "from": rng.normal(0, 0.05, (64, self.n)).astype(np.float32),
             "to": rng.normal(0, 0.05, (64, self.n)).astype(np.float32),
             "promo": rng.normal(0, 0.05, (5, self.n)).astype(np.float32),
+            "value_w": rng.normal(0, 0.05, (1, self.n)).astype(np.float32),
+            "value_b": np.zeros(1, np.float32),
         }
         self.rng = rng
         self.steps = 0
@@ -47,38 +50,85 @@ class FlyPolicy:
         logits = vectors @ x
         probs = np.exp(logits - logits.max())
         probs /= probs.sum()
-        return legal, logits, probs, (features, states, parts, vectors)
+        value = float(np.tanh(self.params["value_w"] @ x + self.params["value_b"])[0])
+        return legal, logits, probs, (features, states, parts, vectors, value)
+
+    def predict_value(self, board: chess.Board, my_clock: float = None, opp_clock: float = None) -> float:
+        features = encode(board, my_clock=my_clock, opp_clock=opp_clock)
+        x = np.tanh(self.params["adapter"] @ features + self.params["adapter_bias"])
+        for _ in range(self.passes):
+            messages = self.weight * self.params["gain"] * x[self.src]
+            x = np.tanh(0.5*x + np.bincount(self.dst, weights=messages, minlength=self.n))
+        return float(np.tanh(self.params["value_w"] @ x + self.params["value_b"])[0])
 
     def choose(self, board: chess.Board, sample: bool = False, my_clock: float = None, opp_clock: float = None):
         legal, _, probs, _ = self.forward(board, my_clock=my_clock, opp_clock=opp_clock)
         idx = self.rng.choice(len(legal), p=probs) if sample else int(np.argmax(probs))
         return legal[idx]
 
-    def gradients(self, board: chess.Board, target: chess.Move, scale: float = 1.0,
+    def gradients(self, board: chess.Board, target=None, target_probs: np.ndarray = None,
+                  value_target: float = None, scale: float = 1.0, value_weight: float = 0.5,
                   my_clock: float = None, opp_clock: float = None):
-        legal, logits, probs, (features, states, parts, vectors) = self.forward(
-            board, my_clock=my_clock, opp_clock=opp_clock)
-        if target not in legal:
-            raise ValueError(f"Teacher move {target.uci()} is illegal in {board.fen()}")
-        idx = legal.index(target)
-        loss = -float(np.log(max(probs[idx], 1e-12)))
-        dlogits = probs.copy()
-        dlogits[idx] -= 1.0
-        dlogits *= scale
+        legal, logits, probs, cache = self.forward(board, my_clock=my_clock, opp_clock=opp_clock)
+        features, states, parts, vectors, value = cache
+
+        # Policy gradient / loss
+        dlogits = np.zeros_like(probs)
+        policy_loss = 0.0
+        if target_probs is not None:
+            t_probs = np.asarray(target_probs, dtype=np.float32)
+            if len(t_probs) != len(legal):
+                raise ValueError(f"target_probs length {len(t_probs)} does not match legal moves {len(legal)}")
+            s = float(t_probs.sum())
+            if s > 0:
+                t_probs = t_probs / s
+            policy_loss = -float(np.sum(t_probs * np.log(np.maximum(probs, 1e-12))))
+            dlogits = (probs - t_probs) * scale
+        elif target is not None:
+            if target not in legal:
+                raise ValueError(f"Teacher move {target.uci()} is illegal in {board.fen()}")
+            idx = legal.index(target)
+            policy_loss = -float(np.log(max(probs[idx], 1e-12)))
+            dlogits = probs.copy()
+            dlogits[idx] -= 1.0
+            dlogits *= scale
+
+        # Value gradient / loss
+        value_loss = 0.0
         grads = {k: np.zeros_like(v) for k, v in self.params.items()}
-        dx = dlogits @ vectors
+        dx_val = np.zeros(self.n, dtype=np.float32)
+
+        if value_target is not None:
+            v_err = value - float(value_target)
+            value_loss = 0.5 * (v_err ** 2)
+            dval_act = v_err * (1.0 - value ** 2) * value_weight
+            grads["value_w"] = np.outer(dval_act, states[-1]).astype(np.float32)
+            grads["value_b"] = np.array([dval_act], dtype=np.float32)
+            dx_val = (dval_act * self.params["value_w"].squeeze()).astype(np.float32)
+
+        # Policy gradients for readout heads
+        dx_pol = dlogits @ vectors
         for k, column in (("from", 0), ("to", 1), ("promo", 2)):
             np.add.at(grads[k], parts[:, column], dlogits[:, None] * states[-1][None, :])
+
+        # Combined biological gradient: policy gradient + value gradient
+        dx = dx_pol + dx_val
+
+        # Backpropagation through biological message passing
         for t in range(self.passes - 1, -1, -1):
             dpre = dx * (1 - states[t+1]**2)
             np.add.at(grads["gain"], np.arange(len(self.src)),
                       dpre[self.dst] * self.weight * states[t][self.src])
             dx = 0.5*dpre + np.bincount(self.src,
                     weights=dpre[self.dst] * self.weight * self.params["gain"], minlength=self.n)
+
+        # Backpropagation to adapter
         dpre = dx * (1 - states[0]**2)
         grads["adapter"] = np.outer(dpre, features).astype(np.float32)
         grads["adapter_bias"] = dpre.astype(np.float32)
-        return loss, grads
+
+        total_loss = policy_loss + value_weight * value_loss
+        return total_loss, grads
 
     def update(self, grads, lr: float = 0.002):
         self.steps += 1
@@ -106,6 +156,11 @@ class FlyPolicy:
                 or header["passes"] != self.passes or header["edges"] != len(self.src)):
             raise ValueError("Checkpoint graph/config does not match")
         for k in self.params:
+            if f"p_{k}" not in data:
+                if k in ("value_w", "value_b"):
+                    # Older checkpoint did not have value head; leave initialized
+                    continue
+                raise ValueError(f"Missing param {k} in checkpoint")
             param_data = data[f"p_{k}"]
             # Support backward compatibility and safe migration from 783-dim inputs
             if k == "adapter" and param_data.shape == (self.n, 783) and self.params["adapter"].shape == (self.n, DIM):
@@ -122,11 +177,12 @@ def migrate_checkpoint(source_path: str, dest_path: str):
     data = np.load(source_path, allow_pickle=False)
     header = json.loads(str(data["header"]))
     saved_params = {}
-    for k in ["adapter", "adapter_bias", "gain", "from", "to", "promo"]:
-        v = data[f"p_{k}"]
-        if k == "adapter" and v.shape[1] == 783:
-            v = np.pad(v, ((0, 0), (0, 2)), mode="constant", constant_values=0.0).astype(np.float32)
-        saved_params[f"p_{k}"] = v
+    for k in ["adapter", "adapter_bias", "gain", "from", "to", "promo", "value_w", "value_b"]:
+        if f"p_{k}" in data:
+            v = data[f"p_{k}"]
+            if k == "adapter" and v.shape[1] == 783:
+                v = np.pad(v, ((0, 0), (0, 2)), mode="constant", constant_values=0.0).astype(np.float32)
+            saved_params[f"p_{k}"] = v
     header["dim"] = DIM
     header["migrated_clock_inputs"] = True
     np.savez_compressed(dest_path, header=json.dumps(header), **saved_params)

@@ -4,20 +4,96 @@ import chess.engine
 import numpy as np
 
 # Standard piece values for material balance
-VALUES = {chess.PAWN: 1.0, chess.KNIGHT: 3.1, chess.BISHOP: 3.3,
-          chess.ROOK: 5.0, chess.QUEEN: 9.0, chess.KING: 0.0}
+VALUES = {
+    chess.PAWN: 1.0,
+    chess.KNIGHT: 3.1,
+    chess.BISHOP: 3.3,
+    chess.ROOK: 5.0,
+    chess.QUEEN: 9.0,
+    chess.KING: 0.0,
+}
+
+# Configurable transparent feature weights summing to 1.0
+FEATURE_WEIGHTS = {
+    "material": 0.28,
+    "safe_activity": 0.12,
+    "coordination": 0.08,
+    "threats_counterplay": 0.20,
+    "pawn_structure": 0.12,
+    "king_safety": 0.20,
+}
+
+
+def evaluate_exchanges(board: chess.Board, side: chess.Color) -> tuple:
+    """Evaluate winning and losing exchanges/threats for side vs opponent.
+    
+    Capturing a defended piece with a more valuable piece registers as negative,
+    while trading equal material or winning an undefended piece registers appropriately.
+    Returns (winning_threats_inflicted, winning_threats_suffered).
+    """
+    def side_threats(c: chess.Color):
+        inflicted = 0.0
+        for sq, piece in board.piece_map().items():
+            if piece.color == c:
+                continue
+            # piece belongs to opponent
+            target_val = VALUES[piece.piece_type]
+            friendly_attackers = board.attackers(c, sq)
+            if not friendly_attackers:
+                continue
+
+            # Minimum value friendly attacker
+            min_atk_val = min(VALUES[board.piece_at(a).piece_type] for a in friendly_attackers)
+            opp_defenders = board.attackers(not c, sq)
+
+            if not opp_defenders:
+                # Undefended piece: win full value
+                inflicted += target_val
+            else:
+                # Defended piece
+                if min_atk_val < target_val:
+                    # Favorable trade (e.g. pawn takes knight or knight takes rook)
+                    inflicted += (target_val - min_atk_val)
+                elif min_atk_val == target_val and len(friendly_attackers) > len(opp_defenders):
+                    # Overwhelmed defense
+                    inflicted += 0.5 * target_val
+        return inflicted
+
+    threats_inflicted = side_threats(side)
+    threats_suffered = side_threats(not side)
+    return threats_inflicted, threats_suffered
 
 
 def features(board: chess.Board, color: chess.Color,
              my_clock: float = None, opp_clock: float = None) -> dict:
-    """Extract interpretable, transparent side-relative chess features using python-chess."""
+    """Extract interpretable, transparent side-relative chess features using python-chess.
+    
+    Provides both raw diagnostic features and normalized sub-scores in [-1.0, 1.0].
+    """
+    # 1. Non-pawn material (NPM) for phase awareness
+    # Total starting NPM for both sides is ~63.6
+    npm = sum(VALUES[p.piece_type] for p in board.piece_map().values()
+              if p.piece_type not in (chess.PAWN, chess.KING))
+    phase = float(np.clip(npm / 32.0, 0.0, 1.0))  # 1.0 = middlegame, 0.0 = late endgame
+
     def side_features(c: chess.Color):
         material = 0.0
         safe_activity = 0.0
         coordination = 0.0
         hanging_value = 0.0
         passed_pawns = 0.0
+        doubled_pawns = 0.0
+        isolated_pawns = 0.0
         threats = 0.0
+        piece_count = 0
+
+        # Track pawns by file for pawn structure
+        pawn_files = []
+        for sq, piece in board.piece_map().items():
+            if piece.color != c:
+                continue
+            if piece.piece_type == chess.PAWN:
+                pawn_files.append(chess.square_file(sq))
 
         for sq, piece in board.piece_map().items():
             if piece.color != c:
@@ -26,6 +102,7 @@ def features(board: chess.Board, color: chess.Color,
             material += val
 
             if piece.piece_type != chess.KING:
+                piece_count += 1
                 defenders = len(board.attackers(c, sq))
                 coordination += min(defenders, 3)
                 attackers = len(board.attackers(not c, sq))
@@ -33,7 +110,7 @@ def features(board: chess.Board, color: chess.Color,
                 if attackers > 0 and (defenders == 0 or attackers > defenders):
                     hanging_value += val
 
-                # Safe mobility: attacks that don't land on enemy pawn attacks
+                # Safe mobility: attacks that don't land on enemy pawn attacks or lesser piece attacks
                 for target in board.attacks(sq):
                     own = board.piece_at(target)
                     enemy = board.piece_at(target)
@@ -42,16 +119,22 @@ def features(board: chess.Board, color: chess.Color,
                             board.piece_at(a) == chess.Piece(chess.PAWN, not c)
                             for a in board.attackers(not c, target)
                         )
-                        if not enemy_pawn_attacks:
+                        enemy_lesser_attacks = any(
+                            board.piece_at(a) is not None and VALUES[board.piece_at(a).piece_type] < val
+                            for a in board.attackers(not c, target)
+                        )
+                        if not enemy_pawn_attacks and not enemy_lesser_attacks:
                             safe_activity += 1.0
+                        elif not enemy_pawn_attacks:
+                            safe_activity += 0.3
                         else:
-                            safe_activity += 0.2
+                            safe_activity += 0.1
 
                     # Threats against higher-value pieces
                     if enemy is not None and enemy.color != c and VALUES[enemy.piece_type] > val:
                         threats += (VALUES[enemy.piece_type] - val)
 
-            # Passed pawns
+            # Pawn structure
             if piece.piece_type == chess.PAWN:
                 rank, file = chess.square_rank(sq), chess.square_file(sq)
                 ahead = range(rank + 1, 8) if c == chess.WHITE else range(rank - 1, -1, -1)
@@ -61,45 +144,78 @@ def features(board: chess.Board, color: chess.Color,
                     for r in ahead
                 )
                 if is_passed:
-                    # Advanced passed pawns are worth more
                     progress = rank if c == chess.WHITE else (7 - rank)
                     passed_pawns += 1.0 + 0.25 * max(0, progress - 3)
 
-        # King safety: attacks to the king zone (surrounding 8 squares) and pawn shield
+                # Doubled pawns
+                if pawn_files.count(file) > 1:
+                    doubled_pawns += 0.5
+
+                # Isolated pawns
+                has_neighbor_pawn = any(abs(f - file) == 1 for f in pawn_files)
+                if not has_neighbor_pawn:
+                    isolated_pawns += 0.5
+
+        # King safety & centralization
         king_sq = board.king(c)
         pawn_shield = 0.0
+        open_files_near_king = 0.0
+        king_zone_threats = 0.0
+        king_centralization = 0.0
+        in_check = float(board.is_check()) if board.turn == c else 0.0
+
         if king_sq is not None:
+            k_file, k_rank = chess.square_file(king_sq), chess.square_rank(king_sq)
             king_zone_threats = sum(
                 len(board.attackers(not c, s)) for s in board.attacks(king_sq)
             )
-            in_check = float(board.is_check()) if board.turn == c else 0.0
-            # Pawn shield in front of castled king
-            k_file, k_rank = chess.square_file(king_sq), chess.square_rank(king_sq)
+            # Pawn shield in front of king
             shield_ranks = [k_rank + 1, k_rank + 2] if c == chess.WHITE else [k_rank - 1, k_rank - 2]
             for f in range(max(0, k_file - 1), min(7, k_file + 1) + 1):
                 if any(board.piece_at(chess.square(f, r)) == chess.Piece(chess.PAWN, c)
                        for r in shield_ranks if 0 <= r < 8):
                     pawn_shield += 1.0
+                else:
+                    open_files_near_king += 0.5
+
+            # Endgame king centralization: distance to center (3.5, 3.5)
+            dist_to_center = max(abs(k_file - 3.5), abs(k_rank - 3.5))
+            king_centralization = 3.5 - dist_to_center
         else:
             king_zone_threats = 8.0
             in_check = 1.0
+
+        mg_king_score = pawn_shield - open_files_near_king - 0.25 * king_zone_threats - 1.5 * in_check
+        eg_king_score = king_centralization
+        blended_king = phase * mg_king_score + (1.0 - phase) * eg_king_score
+
+        pawn_structure_score = passed_pawns - doubled_pawns - isolated_pawns
+        coord_ratio = coordination / max(1.0, float(piece_count))
 
         return {
             "material": material,
             "safe_activity": safe_activity,
             "coordination": coordination,
+            "coord_ratio": coord_ratio,
             "hanging_value": hanging_value,
             "passed_pawns": passed_pawns,
+            "pawn_structure_score": pawn_structure_score,
             "threats": threats,
             "king_zone_threats": king_zone_threats,
             "pawn_shield": pawn_shield,
+            "open_files_near_king": open_files_near_king,
+            "king_centralization": king_centralization,
+            "blended_king": blended_king,
             "in_check": in_check,
         }
 
     own_f = side_features(color)
     opp_f = side_features(not color)
 
-    # Clock advantage: normalized difference in remaining time
+    # Exchange evaluation: captures, trades, and counterplay
+    threats_inflicted, threats_suffered = evaluate_exchanges(board, color)
+
+    # Clock advantage & time pressure
     clock_advantage = 0.0
     time_pressure_penalty = 0.0
     if my_clock is not None and opp_clock is not None:
@@ -107,44 +223,80 @@ def features(board: chess.Board, color: chess.Color,
         if my_clock < 10.0:
             time_pressure_penalty = float(np.clip((10.0 - my_clock) / 10.0, 0.0, 1.0))
 
-    # King safety: own pawn shelter and pressure on opponent king
-    king_safety = (
+    # King safety: raw formula preserved for test compatibility
+    king_safety_raw = (
         (own_f["pawn_shield"] - opp_f["pawn_shield"]) +
         (opp_f["king_zone_threats"] - own_f["king_zone_threats"])
     )
 
+    # Comparably normalized sub-scores in [-1.0, 1.0]
+    mat_diff = own_f["material"] - opp_f["material"]
+    norm_material = float(np.tanh(mat_diff / 4.0))
+
+    act_diff = own_f["safe_activity"] - opp_f["safe_activity"]
+    norm_safe_activity = float(np.tanh(act_diff / 12.0))
+
+    coord_diff = own_f["coord_ratio"] - opp_f["coord_ratio"]
+    norm_coordination = float(np.clip(coord_diff, -1.0, 1.0))
+
+    threat_diff = threats_inflicted - threats_suffered
+    # Also incorporate hanging value into threats
+    net_threats = threat_diff + 0.5 * (opp_f["hanging_value"] - own_f["hanging_value"])
+    norm_threats_counterplay = float(np.tanh(net_threats / 3.0))
+
+    pawn_diff = own_f["pawn_structure_score"] - opp_f["pawn_structure_score"]
+    norm_pawn_structure = float(np.tanh(pawn_diff / 3.0))
+
+    king_diff = own_f["blended_king"] - opp_f["blended_king"]
+    norm_king_safety = float(np.tanh(king_diff / 3.0))
+
+    normalized = {
+        "material": norm_material,
+        "safe_activity": norm_safe_activity,
+        "coordination": norm_coordination,
+        "threats_counterplay": norm_threats_counterplay,
+        "pawn_structure": norm_pawn_structure,
+        "king_safety": norm_king_safety,
+    }
+
     return {
-        "material": float(own_f["material"] - opp_f["material"]),
-        "safe_activity": float(own_f["safe_activity"] - opp_f["safe_activity"]),
+        "material": float(mat_diff),
+        "safe_activity": float(act_diff),
         "coordination": float(own_f["coordination"] - opp_f["coordination"]),
-        "hanging_value": float(opp_f["hanging_value"] - own_f["hanging_value"]),  # positive is good (enemy hangs more)
+        "hanging_value": float(opp_f["hanging_value"] - own_f["hanging_value"]),  # positive is good
         "passed_pawns": float(own_f["passed_pawns"] - opp_f["passed_pawns"]),
         "threats": float(own_f["threats"] - opp_f["threats"]),
-        "king_safety": float(king_safety),
+        "king_safety": float(king_safety_raw),
         "clock_advantage": clock_advantage,
         "time_pressure": -time_pressure_penalty,
+        "phase": round(phase, 3),
+        "normalized": normalized,
     }
 
 
 def potential(board: chess.Board, color: chess.Color,
-              my_clock: float = None, opp_clock: float = None) -> float:
-    """Bounded, normalized potential function Phi(s) in (-1, 1). Bounded by tanh to resist farming."""
+              my_clock: float = None, opp_clock: float = None,
+              weights: dict = None) -> float:
+    """Bounded, transparent position potential function Phi(s) in (-1, 1).
+    
+    Combines comparably normalized features with weights summing to 1.0.
+    """
     if board.is_game_over(claim_draw=True):
         return 0.0  # Terminal states have potential 0 in standard potential-based shaping
 
+    w = weights if weights is not None else FEATURE_WEIGHTS
     f = features(board, color, my_clock=my_clock, opp_clock=opp_clock)
-    raw_eval = (
-        0.45 * f["material"] +
-        0.22 * f["hanging_value"] +
-        0.15 * f["king_safety"] +
-        0.10 * f["passed_pawns"] +
-        0.04 * f["safe_activity"] +
-        0.04 * f["coordination"] +
-        0.05 * f["threats"] +
-        0.03 * f["clock_advantage"] +
-        0.02 * f["time_pressure"]
-    )
-    return float(np.tanh(raw_eval / 6.0))
+    norm = f["normalized"]
+
+    phi_features = sum(w.get(k, 0.0) * norm.get(k, 0.0) for k in w)
+
+    # Optional subtle clock adjustments if clocks are present
+    clock_adj = 0.0
+    if my_clock is not None and opp_clock is not None:
+        clock_adj = 0.02 * f["clock_advantage"] + 0.01 * f["time_pressure"]
+
+    raw_eval = phi_features + clock_adj
+    return float(np.clip(raw_eval, -0.99, 0.99))
 
 
 def result_value(board: chess.Board, color: chess.Color) -> float:
@@ -157,7 +309,7 @@ def result_value(board: chess.Board, color: chess.Color) -> float:
     return 1.0 if outcome.winner == color else -1.0
 
 
-def move_audit(engine, board: chess.Board, move: chess.Move, nodes: int = 2000):
+def move_audit(engine, board: chess.Board, move: chess.Move, nodes: int = 1500):
     """Engine evaluation and WDL before and after a move, from mover's perspective."""
     color = board.turn
     limit = chess.engine.Limit(nodes=nodes)
@@ -193,17 +345,28 @@ def compute_game_rewards(match_dict: dict,
                          gamma: float = 0.99) -> dict:
     """Compute transparent training rewards, terminal outcome, and detailed chess diagnostics."""
     moves = match_dict.get("moves", [])
-    fly_color = chess.WHITE if match_dict.get("fly_color") == "white" else chess.BLACK
+    fly_c_val = match_dict.get("fly_color")
+    fly_c_str = "white" if (fly_c_val in ("white", chess.WHITE, True) or str(fly_c_val).lower() == "white") else "black"
+    fly_color = chess.WHITE if fly_c_str == "white" else chess.BLACK
     terminal_result = match_dict.get("result")
     winner = match_dict.get("winner")
 
     # 1. Final match outcome
-    if winner == "fly":
+    w_str = str(winner).lower() if winner is not None else ""
+    if "fly" in w_str:
         terminal_reward = 1.0
-    elif winner == "stockfish":
+    elif "stockfish" in w_str or "engine" in w_str:
         terminal_reward = -1.0
+    elif terminal_result in ("1-0", "0-1"):
+        fly_won = (fly_color == chess.WHITE and terminal_result == "1-0") or (fly_color == chess.BLACK and terminal_result == "0-1")
+        terminal_reward = 1.0 if fly_won else -1.0
     else:
         terminal_reward = 0.0
+
+    def is_fly(m):
+        p = str(m.get("player", "")).lower()
+        c = str(m.get("color", "")).lower()
+        return (p == "fly") or ("chessfly" in p) or ("fly" in p) or (c == fly_c_str)
 
     # 2. Step-by-step transition rewards after opponent's response
     # We evaluate Phi(s_t) before fly move and Phi(s_{t+1}) after opponent's response!
@@ -214,7 +377,7 @@ def compute_game_rewards(match_dict: dict,
     i = 0
     while i < len(moves):
         m_fly = moves[i]
-        if m_fly["player"] == "fly":
+        if is_fly(m_fly):
             before_board = board.copy()
             phi_before = potential(before_board, fly_color,
                                    my_clock=m_fly.get("white_clock" if fly_color == chess.WHITE else "black_clock"),
@@ -242,9 +405,23 @@ def compute_game_rewards(match_dict: dict,
             # Potential-based shaping: bounded intermediate feedback
             shaped_delta = 0.15 * (gamma * phi_after - phi_before)
 
-            # Bounded move regret penalty: each move loss / 1500
-            move_regret_loss = regret_info.get("loss_cp", 0.0)
-            step_reward = shaped_delta
+            # Bounded per-move regret penalty:
+            # - 0.0 for loss_cp <= 20
+            # - up to -0.05 for small inaccuracy (20 < loss_cp <= 100)
+            # - -0.05 to -0.20 for mistakes (100 < loss_cp <= 300)
+            # - -0.20 to -0.50 for tactical blunders (loss_cp > 300)
+            loss_cp = regret_info.get("loss_cp", 0.0)
+            if loss_cp <= 20:
+                move_penalty = 0.0
+            elif loss_cp <= 100:
+                move_penalty = -0.05 * (loss_cp - 20) / 80.0
+            elif loss_cp <= 300:
+                move_penalty = -0.05 - 0.15 * (loss_cp - 100) / 200.0
+            else:
+                move_penalty = -0.20 - 0.30 * min(1.0, (loss_cp - 300) / 700.0)
+
+            step_reward = shaped_delta + move_penalty
+            feat_after = features(board, fly_color)
 
             fly_transitions.append({
                 "ply": m_fly["ply"],
@@ -253,9 +430,11 @@ def compute_game_rewards(match_dict: dict,
                 "phi_before": round(phi_before, 4),
                 "phi_after": round(phi_after, 4),
                 "shaped_reward": round(shaped_delta, 4),
-                "loss_cp": move_regret_loss,
+                "loss_cp": loss_cp,
+                "move_penalty": round(move_penalty, 4),
                 "step_reward": round(step_reward, 4),
-                "features_after": features(board, fly_color),
+                "features_after": feat_after,
+                "normalized_after": feat_after["normalized"],
             })
             i += 2 if m_opp else 1
         else:
@@ -265,14 +444,13 @@ def compute_game_rewards(match_dict: dict,
                 board.push(opp_move)
             i += 1
 
-    # Bounded total engine penalty: maximum 0.10 total across the game
+    # Bounded total engine penalty diagnostics: maximum 0.10 total across the game
     total_regret = float(np.mean(engine_regrets)) if engine_regrets else 0.0
     engine_penalty = min(0.10, total_regret / 1500.0)
 
-    # Distribute the engine penalty and add terminal reward at the end
-    num_steps = max(1, len(fly_transitions))
+    # Distribute rewards and add terminal reward to the final transition
     for t in fly_transitions:
-        t["training_reward"] = t["step_reward"] - (engine_penalty / num_steps)
+        t["training_reward"] = t["step_reward"]
 
     if fly_transitions:
         fly_transitions[-1]["training_reward"] += terminal_reward

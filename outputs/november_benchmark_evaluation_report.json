@@ -1,0 +1,485 @@
+{
+  "Untrained FlyWire": {
+    "checkpoint": null,
+    "shuffled": false,
+    "benchmark": {
+      "benchmark_file": "data/benchmarks/november_benchmark_120.jsonl",
+      "total_positions": 120,
+      "legal_rate": 1.0,
+      "mean_acpl": 1046.3,
+      "median_cpl": 269.0,
+      "blunder_rate": 0.4833,
+      "acceptable_move_rate": 0.1917,
+      "top1_accuracy": 0.0917,
+      "value_mse": 0.6236,
+      "representative_positions": {
+        "count": 100,
+        "mean_acpl": 997.4,
+        "median_cpl": 291.5,
+        "top1_accuracy": 0.05
+      },
+      "tactical_challenge": {
+        "count": 20,
+        "mean_acpl": 1290.8,
+        "median_cpl": 180.5,
+        "top1_accuracy": 0.3
+      }
+    },
+    "audited_cases": {
+      "case_1_sound_sacrifice": {
+        "king_safety_increase": 3.0,
+        "sound": true
+      },
+      "case_2_poisoned_pawn": {
+        "black_phi_before": -0.1049,
+        "black_phi_after": -0.1189,
+        "refuted": true
+      },
+      "case_3_outright_blunder": {
+        "checkmate": true,
+        "black_result": -1.0,
+        "punished": true
+      },
+      "case_4_active_move_counterplay": {
+        "white_hanging_value": -1.0,
+        "white_phi": -0.3801,
+        "refuted": true
+      },
+      "repetition_resistance": {
+        "phi_start": 0.0,
+        "phi_end": 0.0,
+        "net_potential_delta": 0.0,
+        "zero_delta": true
+      },
+      "model_choices": {
+        "case_1": {
+          "chosen": "c3d4",
+          "chosen_san": "cxd4",
+          "value_pred": -0.0535
+        },
+        "case_2": {
+          "chosen": "a2a3",
+          "chosen_san": "a3",
+          "value_pred": -0.1858
+        },
+        "case_3_defend": {
+          "chosen": "c6e7",
+          "chosen_san": "Ne7",
+          "value_pred": -0.1646
+        },
+        "case_4_black": {
+          "chosen": "d7d5",
+          "chosen_san": "d5",
+          "value_pred": -0.1562
+        }
+      }
+    }
+  },
+  "Pre-RL SFT (fly-200)": {
+    "checkpoint": "outputs/fly-200.npz",
+    "shuffled": false,
+    "benchmark": {
+      "benchmark_file": "data/benchmarks/november_benchmark_120.jsonl",
+      "total_positions": 120,
+      "legal_rate": 1.0,
+      "mean_acpl": 783.9,
+      "median_cpl": 221.0,
+      "blunder_rate": 0.4083,
+      "acceptable_move_rate": 0.2417,
+      "top1_accuracy": 0.1083,
+      "value_mse": 0.6661,
+      "representative_positions": {
+        "count": 100,
+        "mean_acpl": 699.2,
+        "median_cpl": 221.0,
+        "top1_accuracy": 0.08
+      },
+      "tactical_challenge": {
+        "count": 20,
+        "mean_acpl": 1207.2,
+        "median_cpl": 185.0,
+        "top1_accuracy": 0.25
+      }
+    },
+    "audited_cases": {
+      "case_1_sound_sacrifice": {
+        "king_safety_increase": 3.0,
+        "sound": true
+      },
+      "case_2_poisoned_pawn": {
+        "black_phi_before": -0.1049,
+        "black_phi_after": -0.1189,
+        "refuted": true
+      },
+      "case_3_outright_blunder": {
+        "checkmate": true,
+        "black_result": -1.0,
+        "punished": true
+      },
+      "case_4_active_move_counterplay": {
+        "white_hanging_value": -1.0,
+        "white_phi": -0.3801,
+        "refuted": true
+      },
+      "repetition_resistance": {
+        "phi_start": 0.0,
+        "phi_end": 0.0,
+        "net_potential_delta": 0.0,
+        "zero_delta": true
+      },
+      "model_choices": {
+        "case_1": {
+          "chosen": "g2g3",
+          "chosen_san": "g3",
+          "value_pred": -0.1106
+        },
+        "case_2": {
+          "chosen": "c4c6",
+          "chosen_san": "Qxc6+",
+          "value_pred": 0.0677
+        },
+        "case_3_defend": {
+          "chosen": "c6b4",
+          "chosen_san": "Nb4",
+          "value_pred": -0.075
+        },
+        "case_4_black": {
+          "chosen": "h7h5",
+          "chosen_san": "h5",
+          "value_pred": -0.1012
+        }
+      }
+    }
+  },
+  "New SFT Fly (2k SFT)": {
+    "checkpoint": "outputs/fly-supervised-2k.npz",
+    "shuffled": false,
+    "benchmark": {
+      "benchmark_file": "data/benchmarks/november_benchmark_120.jsonl",
+      "total_positions": 120,
+      "legal_rate": 1.0,
+      "mean_acpl": 1025.7,
+      "median_cpl": 250.0,
+      "blunder_rate": 0.4583,
+      "acceptable_move_rate": 0.2417,
+      "top1_accuracy": 0.1083,
+      "value_mse": 0.5916,
+      "representative_positions": {
+        "count": 100,
+        "mean_acpl": 892.6,
+        "median_cpl": 258.0,
+        "top1_accuracy": 0.08
+      },
+      "tactical_challenge": {
+        "count": 20,
+        "mean_acpl": 1691.6,
+        "median_cpl": 162.5,
+        "top1_accuracy": 0.25
+      }
+    },
+    "audited_cases": {
+      "case_1_sound_sacrifice": {
+        "king_safety_increase": 3.0,
+        "sound": true
+      },
+      "case_2_poisoned_pawn": {
+        "black_phi_before": -0.1049,
+        "black_phi_after": -0.1189,
+        "refuted": true
+      },
+      "case_3_outright_blunder": {
+        "checkmate": true,
+        "black_result": -1.0,
+        "punished": true
+      },
+      "case_4_active_move_counterplay": {
+        "white_hanging_value": -1.0,
+        "white_phi": -0.3801,
+        "refuted": true
+      },
+      "repetition_resistance": {
+        "phi_start": 0.0,
+        "phi_end": 0.0,
+        "net_potential_delta": 0.0,
+        "zero_delta": true
+      },
+      "model_choices": {
+        "case_1": {
+          "chosen": "e2d4",
+          "chosen_san": "Nexd4",
+          "value_pred": 0.0825
+        },
+        "case_2": {
+          "chosen": "g1f3",
+          "chosen_san": "Nf3",
+          "value_pred": 0.0668
+        },
+        "case_3_defend": {
+          "chosen": "f8d6",
+          "chosen_san": "Bd6",
+          "value_pred": -0.0061
+        },
+        "case_4_black": {
+          "chosen": "d4e6",
+          "chosen_san": "Ne6",
+          "value_pred": -0.0707
+        }
+      }
+    }
+  },
+  "RL Fly (Actor-Critic)": {
+    "checkpoint": "outputs/fly-rl-pilot.npz",
+    "shuffled": false,
+    "benchmark": {
+      "benchmark_file": "data/benchmarks/november_benchmark_120.jsonl",
+      "total_positions": 120,
+      "legal_rate": 1.0,
+      "mean_acpl": 858.9,
+      "median_cpl": 206.0,
+      "blunder_rate": 0.3833,
+      "acceptable_move_rate": 0.2083,
+      "top1_accuracy": 0.1167,
+      "value_mse": 1.0845,
+      "representative_positions": {
+        "count": 100,
+        "mean_acpl": 786.5,
+        "median_cpl": 221.0,
+        "top1_accuracy": 0.08
+      },
+      "tactical_challenge": {
+        "count": 20,
+        "mean_acpl": 1220.8,
+        "median_cpl": 110.5,
+        "top1_accuracy": 0.3
+      }
+    },
+    "audited_cases": {
+      "case_1_sound_sacrifice": {
+        "king_safety_increase": 3.0,
+        "sound": true
+      },
+      "case_2_poisoned_pawn": {
+        "black_phi_before": -0.1049,
+        "black_phi_after": -0.1189,
+        "refuted": true
+      },
+      "case_3_outright_blunder": {
+        "checkmate": true,
+        "black_result": -1.0,
+        "punished": true
+      },
+      "case_4_active_move_counterplay": {
+        "white_hanging_value": -1.0,
+        "white_phi": -0.3801,
+        "refuted": true
+      },
+      "repetition_resistance": {
+        "phi_start": 0.0,
+        "phi_end": 0.0,
+        "net_potential_delta": 0.0,
+        "zero_delta": true
+      },
+      "model_choices": {
+        "case_1": {
+          "chosen": "f1e1",
+          "chosen_san": "Re1",
+          "value_pred": -0.7831
+        },
+        "case_2": {
+          "chosen": "g1f3",
+          "chosen_san": "Nf3",
+          "value_pred": -0.8982
+        },
+        "case_3_defend": {
+          "chosen": "f8d6",
+          "chosen_san": "Bd6",
+          "value_pred": -0.8475
+        },
+        "case_4_black": {
+          "chosen": "d4f3",
+          "chosen_san": "Nf3+",
+          "value_pred": -0.8658
+        }
+      }
+    }
+  },
+  "Shuffled Control (2k SFT)": {
+    "checkpoint": "outputs/shuffled-supervised-2k.npz",
+    "shuffled": true,
+    "benchmark": {
+      "benchmark_file": "data/benchmarks/november_benchmark_120.jsonl",
+      "total_positions": 120,
+      "legal_rate": 1.0,
+      "mean_acpl": 1020.0,
+      "median_cpl": 260.0,
+      "blunder_rate": 0.4667,
+      "acceptable_move_rate": 0.2167,
+      "top1_accuracy": 0.1083,
+      "value_mse": 0.6056,
+      "representative_positions": {
+        "count": 100,
+        "mean_acpl": 876.9,
+        "median_cpl": 292.0,
+        "top1_accuracy": 0.08
+      },
+      "tactical_challenge": {
+        "count": 20,
+        "mean_acpl": 1735.4,
+        "median_cpl": 212.5,
+        "top1_accuracy": 0.25
+      }
+    },
+    "audited_cases": {
+      "case_1_sound_sacrifice": {
+        "king_safety_increase": 3.0,
+        "sound": true
+      },
+      "case_2_poisoned_pawn": {
+        "black_phi_before": -0.1049,
+        "black_phi_after": -0.1189,
+        "refuted": true
+      },
+      "case_3_outright_blunder": {
+        "checkmate": true,
+        "black_result": -1.0,
+        "punished": true
+      },
+      "case_4_active_move_counterplay": {
+        "white_hanging_value": -1.0,
+        "white_phi": -0.3801,
+        "refuted": true
+      },
+      "repetition_resistance": {
+        "phi_start": 0.0,
+        "phi_end": 0.0,
+        "net_potential_delta": 0.0,
+        "zero_delta": true
+      },
+      "model_choices": {
+        "case_1": {
+          "chosen": "e2g3",
+          "chosen_san": "Ng3",
+          "value_pred": 0.1914
+        },
+        "case_2": {
+          "chosen": "g1f3",
+          "chosen_san": "Nf3",
+          "value_pred": 0.141
+        },
+        "case_3_defend": {
+          "chosen": "f8d6",
+          "chosen_san": "Bd6",
+          "value_pred": -0.0043
+        },
+        "case_4_black": {
+          "chosen": "f8d6",
+          "chosen_san": "Bd6",
+          "value_pred": -0.0626
+        }
+      }
+    }
+  },
+  "Shuffled Control (RL)": {
+    "checkpoint": "outputs/shuffled-rl-pilot.npz",
+    "shuffled": true,
+    "benchmark": {
+      "benchmark_file": "data/benchmarks/november_benchmark_120.jsonl",
+      "total_positions": 120,
+      "legal_rate": 1.0,
+      "mean_acpl": 1007.3,
+      "median_cpl": 256.0,
+      "blunder_rate": 0.45,
+      "acceptable_move_rate": 0.1917,
+      "top1_accuracy": 0.0917,
+      "value_mse": 0.9761,
+      "representative_positions": {
+        "count": 100,
+        "mean_acpl": 863.5,
+        "median_cpl": 268.5,
+        "top1_accuracy": 0.06
+      },
+      "tactical_challenge": {
+        "count": 20,
+        "mean_acpl": 1726.6,
+        "median_cpl": 190.5,
+        "top1_accuracy": 0.25
+      }
+    },
+    "audited_cases": {
+      "case_1_sound_sacrifice": {
+        "king_safety_increase": 3.0,
+        "sound": true
+      },
+      "case_2_poisoned_pawn": {
+        "black_phi_before": -0.1049,
+        "black_phi_after": -0.1189,
+        "refuted": true
+      },
+      "case_3_outright_blunder": {
+        "checkmate": true,
+        "black_result": -1.0,
+        "punished": true
+      },
+      "case_4_active_move_counterplay": {
+        "white_hanging_value": -1.0,
+        "white_phi": -0.3801,
+        "refuted": true
+      },
+      "repetition_resistance": {
+        "phi_start": 0.0,
+        "phi_end": 0.0,
+        "net_potential_delta": 0.0,
+        "zero_delta": true
+      },
+      "model_choices": {
+        "case_1": {
+          "chosen": "e2g3",
+          "chosen_san": "Ng3",
+          "value_pred": -0.6441
+        },
+        "case_2": {
+          "chosen": "g1f3",
+          "chosen_san": "Nf3",
+          "value_pred": -0.8487
+        },
+        "case_3_defend": {
+          "chosen": "f8d6",
+          "chosen_san": "Bd6",
+          "value_pred": -0.8571
+        },
+        "case_4_black": {
+          "chosen": "f8d6",
+          "chosen_san": "Bd6",
+          "value_pred": -0.8639
+        }
+      }
+    }
+  },
+  "Random Baseline": {
+    "checkpoint": null,
+    "shuffled": false,
+    "benchmark": {
+      "benchmark_file": "data/benchmarks/november_benchmark_120.jsonl",
+      "total_positions": 120,
+      "legal_rate": 1.0,
+      "mean_acpl": 992.8,
+      "median_cpl": 323.0,
+      "blunder_rate": 0.5167,
+      "acceptable_move_rate": 0.1833,
+      "top1_accuracy": 0.0833,
+      "value_mse": 0.6053,
+      "representative_positions": {
+        "count": 100,
+        "mean_acpl": 1027.1,
+        "median_cpl": 344.0,
+        "top1_accuracy": 0.05
+      },
+      "tactical_challenge": {
+        "count": 20,
+        "mean_acpl": 821.4,
+        "median_cpl": 182.5,
+        "top1_accuracy": 0.25
+      }
+    }
+  }
+}

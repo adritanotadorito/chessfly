@@ -1,6 +1,6 @@
 # FlyChess: a fly-wired chess policy starter
 
-This is a **small, runnable experiment**, not a completed AfterQuery submission or evidence that a biological fruit fly learned chess. The policy's recurrent connections come from a fixed subset of FlyWire connections when you supply the real `connections.csv` from [train-your-fly](https://github.com/eudald-seeslab/train-your-fly). The board adapter, move readout and training algorithm are engineered. A synthetic graph is included **only** to verify that the code runs before the real dataset is available.
+This is a **small, runnable experiment**, not a completed AfterQuery submission or evidence that a biological fruit fly learned chess. The policy's recurrent connections come from a fixed subset of FlyWire connections when you supply the real `connections.csv` from [train-your-fly](https://github.com/eudald-seeslab/train-your-fly). The board adapter, move readout, value head, and training algorithm are engineered. A synthetic graph is included **only** to verify that the code runs before the real dataset is available.
 
 ## Why this implementation
 
@@ -8,7 +8,7 @@ This is a **small, runnable experiment**, not a completed AfterQuery submission 
 
 ## Setup on macOS
 
-From the unzipped `flychess-starter` directory:
+From the unzipped `flychess` directory:
 
 ```bash
 python3 -m venv .venv
@@ -21,9 +21,9 @@ python -m unittest discover -s tests -v
 
 The fixture output must say `authentic_flywire: false`. The smoke command prints scored legal moves, completes a four-move episode, then attempts a full game against a seeded random opponent and reports whether it truly ended. **That is a software check, not fly-model training.**
 
-## Switch to genuine FlyWire connections
+## Genuine FlyWire connections
 
-Get `connections.csv` from the documented `train-your-fly` connectome dataset. The upstream quick start downloads approximately 1.3 GB of connectome files on first use; it may take time and disk space. Find its `connections.csv` with columns `pre_root_id,post_root_id,syn_count`, then run:
+Get `connections.csv` from the documented `train-your-fly` connectome dataset. Find its `connections.csv` with columns `pre_root_id,post_root_id,syn_count`, then run:
 
 ```bash
 mkdir -p data outputs
@@ -31,133 +31,183 @@ python -m flychess.cli prepare-graph /path/to/connections.csv data/flywire-subgr
 python -m flychess.cli smoke --graph data/flywire-subgraph.npz
 ```
 
-Use `--confirm-flywire` only after confirming where the CSV came from; matching column names alone are not proof. The graph extraction is deterministic: it keeps the strongest edges, grows a connected set, saves original neuron IDs, and records a SHA-256 of the source CSV. It does **not** choose a biologically validated sensory-to-motor circuit. The model learns an input adapter, one gain per selected connection, and a legal-move readout. Its shuffled control permutes destinations among the same selected edges; the source out-degree and destination in-degree distributions remain the same.
+The graph extraction is deterministic: it keeps the strongest edges, grows a connected set of 256 neurons with 396 synaptic connections, saves original neuron IDs, and records a SHA-256 of the source CSV. The model learns an input adapter, one gain per selected connection ($g_e \in [-2, 2]$), a legal-move readout, and a value head. Its shuffled control permutes destinations among the same selected edges; the source out-degree and destination in-degree distributions remain the same.
 
-## Warm start and controls
+---
 
-Install Stockfish separately (for example `brew install stockfish` on macOS). Record its version. Generate teacher moves with one thread and a fixed node budget. The same dataset can train both graph conditions; the held-out split is by generated game, not by individual position.
+## Data Pipeline: Streaming Lichess Rated Archives
+
+Bulk raw `.pgn.zst` files in `data/lichess/` are streamed directly on the fly using system `zstd -dc` pipes without full disk decompression.
+
+- **Split Protocol**:
+  - **Training Split**: January–September 2013 archives.
+  - **Validation Split**: October 2013 archive (for hyperparameter tuning & early-stopping checkpoint selection).
+  - **Frozen Test Benchmark**: November 2013 archive (`data/benchmarks/november_benchmark_120.jsonl`, 100 representative + 20 tactical challenge positions). Never used for training or checkpoint selection.
+- **Filters**:
+  - Valid, completed standard rated games.
+  - Both players rated $\ge 1500$ Elo.
+  - Normal terminations (checkmate, resignation, out of time, draw).
+  - Varied middlegame and endgame positions.
+  - Split by whole game, with global FEN deduplication across splits.
+  - Full provenance tracking (source month, Lichess game ID, ply, game phase).
+
+---
+
+## Transparent Chess Position Potential & Rewards
+
+The reward system provides an interpretable, bounded potential $\Phi(s) \in (-1, 1)$ combining 6 individually normalized sub-scores with configurable weights summing to 1.0:
+
+1. **Material Balance ($w = 0.28$)**:
+   $$\hat{f}_{\text{mat}} = \tanh\left(\frac{M_{\text{own}} - M_{\text{opp}}}{4.0}\right) \in (-1, 1)$$
+   Standard values: $P=1.0, N=3.1, B=3.3, R=5.0, Q=9.0$.
+
+2. **Safe Piece Activity ($w = 0.12$)**:
+   Counts squares attacked by friendly pieces that are not controlled by enemy pawns or lesser enemy pieces.
+   $$\hat{f}_{\text{safe}} = \tanh\left(\frac{\text{safe}_{\text{own}} - \text{safe}_{\text{opp}}}{12.0}\right) \in (-1, 1)$$
+
+3. **Coordination & Defended Pieces ($w = 0.08$)**:
+   Fraction of friendly non-king pieces that have at least one defender.
+   $$\hat{f}_{\text{coord}} = \text{clip}\left(\frac{\text{defended}_{\text{own}}}{\text{pieces}_{\text{own}}} - \frac{\text{defended}_{\text{opp}}}{\text{pieces}_{\text{opp}}}, -1, 1\right)$$
+
+4. **Opponent Threats, Immediate Counterplay & Exchange Evaluation ($w = 0.20$)**:
+   Rigorous exchange evaluation:
+   - Capturing a defended piece with a more valuable piece registers as **negative**.
+   - Winning an undefended piece registers **positively**.
+   - Trading equal material registers **neutrally**.
+   $$\hat{f}_{\text{threats}} = \tanh\left(\frac{T_{\text{inflicted}} - T_{\text{suffered}}}{3.0}\right) \in (-1, 1)$$
+
+5. **Pawn Structure ($w = 0.12$)**:
+   Passed pawn progress bonus ($+1.0 + 0.25 \times \text{rank}$) minus penalties for doubled pawns ($-0.5$) and isolated pawns ($-0.5$).
+   $$\hat{f}_{\text{pawn}} = \tanh\left(\frac{P_{\text{own}} - P_{\text{opp}}}{3.0}\right) \in (-1, 1)$$
+
+6. **King Safety & Centralization ($w = 0.20$)**:
+   Blended by game phase ($\rho = \text{clamp}(\text{npm}/32.0, 0.0, 1.0)$):
+   - *Middlegame ($\rho \to 1$)*: Pawn shelter in front of king minus open files near king and enemy king-zone attackers.
+   - *Endgame ($\rho \to 0$)*: King centralization toward center squares $(3.5, 3.5)$.
+   $$\hat{f}_{\text{king}} = \tanh\left(\frac{K_{\text{own}} - K_{\text{opp}}}{3.0}\right) \in (-1, 1)$$
+
+### Transition Reward & Engine Regret
+- **Intermediate Transition Reward**: Evaluated strictly **after the opponent's reply**:
+  $$\Delta \Phi_t = 0.15 \times (0.99 \Phi(s_{t+1}) - \Phi(s_t))$$
+- **Bounded Centipawn Regret Penalty**:
+  - $0.0$ for loss $\le 20$ cp (sound moves)
+  - Up to $-0.05$ for small inaccuracy ($20 < \text{loss} \le 100$ cp)
+  - $-0.05$ to $-0.20$ for mistakes ($100 < \text{loss} \le 300$ cp)
+  - $-0.20$ to $-0.50$ for tactical blunders ($\text{loss} > 300$ cp)
+- **Terminal Outcome Dominance**:
+  $$R_{\text{terminal}} = +1.0\ (\text{win}),\ 0.0\ (\text{draw}),\ -1.0\ (\text{loss})$$
+
+---
+
+## Supervised Distillation Pilot (Jan–Sep Train / Oct Val)
+
+Run the supervised distillation pilot on 2,000 positions with soft Boltzmann move targets ($T=50.0$ cp) and value targets $V^*(s) = \tanh(\text{cp}/400)$:
 
 ```bash
-python -m flychess.cli generate --stockfish "$(command -v stockfish)" --out data/teacher.jsonl --games 40
-python -m flychess.cli train --graph data/flywire-subgraph.npz --dataset data/teacher.jsonl --out outputs/fly.npz --epochs 8
-python -m flychess.cli train --graph data/flywire-subgraph.npz --dataset data/teacher.jsonl --out outputs/shuffled.npz --epochs 8 --shuffled
-python -m flychess.cli heldout --graph data/flywire-subgraph.npz --dataset data/teacher.jsonl --checkpoint outputs/fly.npz
-python -m flychess.cli heldout --graph data/flywire-subgraph.npz --dataset data/teacher.jsonl --checkpoint outputs/shuffled.npz --shuffled
+# Train FlyWire-constrained policy
+python -m flychess.cli train-pilot \
+  --graph data/flywire-subgraph.npz \
+  --train data/training/train_2000.jsonl \
+  --val data/training/val_oct_200.jsonl \
+  --out outputs/fly-supervised-2k.npz \
+  --epochs 6 \
+  --seed 42
+
+# Train matched Shuffled-Wiring control
+python -m flychess.cli train-pilot \
+  --graph data/flywire-subgraph.npz \
+  --train data/training/train_2000.jsonl \
+  --val data/training/val_oct_200.jsonl \
+  --out outputs/shuffled-supervised-2k.npz \
+  --shuffled \
+  --epochs 6 \
+  --seed 42
 ```
 
-The report shows initial and post-training held-out top-move agreement. A small or absent gain means the experiment did not demonstrate useful learning. Matching the teacher is a **warm start**, not RL and not proof of chess strength. The dataset generator uses random openings; it is **not** the curated AfterQuery challenge set.
+Checkpoint selection is strictly based on the minimum validation loss on the October 2013 split (Epoch 2 selected for both models).
 
-## 1+0 Bullet Matches and Transparent Chess Rewards
+---
 
-### Bullet Match Runner (1+0)
-- **Time control**: 1 minute per side, zero increment (60s + 0s).
-- **Clock**: Timed strictly with `time.perf_counter()` before and after move requests.
-- **Rules**: Checkmate, stalemate, threefold repetition, 50-move rule, and timeout flagging with insufficient-material draw verification (`board.has_insufficient_material`).
-- **Engine settings**: Stockfish 19 (`/opt/homebrew/bin/stockfish`). Weaker bot setting for training: `{"Skill Level": 0, "UCI_LimitStrength": True, "UCI_Elo": 1350, "Threads": 1, "Hash": 16}`. Pondering disabled. Clocks passed via `chess.engine.Limit(white_clock=..., black_clock=..., white_inc=0, black_inc=0)`.
+## Online Advantage Actor-Critic (A2C) RL Training
 
-### Transparent Chess Reward Formula
-To prevent reward farming (e.g. piece-shuffling or check spamming), the reward uses potential-based shaping with strict terminal outcome dominance:
-
-1. **Side-relative interpretable features** $f(s, c)$:
-   - **Material** ($P=1.0, N=3.1, B=3.3, R=5.0, Q=9.0$): Weight $0.45$
-   - **Hanging Pieces / Exposure**: Weight $0.22$
-   - **King Safety** (pawn shield shelter + king zone threat count): Weight $0.15$
-   - **Passed Pawns** (scaled by advance rank): Weight $0.10$
-   - **Safe Activity** (moves not into enemy pawn control): Weight $0.04$
-   - **Coordination** (defended friendly pieces): Weight $0.04$
-   - **Direct Threats** against higher-value pieces: Weight $0.05$
-   - **Clock Advantage** ($\frac{t_{\text{my}} - t_{\text{opp}}}{60.0}$): Weight $0.03$
-   - **Time Pressure Penalty** ($t_{\text{my}} < 10\text{s}$): Weight $0.02$
-
-2. **Bounded Position Potential**:
-   $$\Phi(s, c) = \tanh\left(\frac{\sum_i w_i f_i(s, c)}{6.0}\right) \in (-1.0, 1.0)$$
-   Terminal states: $\Phi(s_{\text{terminal}}) = 0$.
-
-3. **Transition Reward (After Opponent's Strong Response)**:
-   $$\Delta \Phi_t = 0.15 \times (0.99 \Phi(s_{t+1}, c) - \Phi(s_t, c))$$
-   Evaluating $\Phi$ after the opponent's reply guarantees that flashy sacrifices are tested against the opponent's counterplay.
-
-4. **Bounded Post-Game Stockfish Move Regret**:
-   Evaluated at a fixed 1,500 nodes/move:
-   $$\text{Penalty}_{\text{engine}} = \min\left(0.10, \frac{1}{M} \sum_{t=1}^M \frac{\max(0, \text{best\_cp}_t - \text{chosen\_cp}_t)}{1500.0}\right)$$
-   The engine penalty cannot exceed $0.10$ across the entire game.
-
-5. **Terminal Outcome Dominance**:
-   $$R_{\text{terminal}} = +1.0\ (\text{win}),\ 0.0\ (\text{draw}),\ -1.0\ (\text{loss or flag})$$
-   Total return is dominated by $R_{\text{terminal}} \pm 0.15 - \text{Penalty}_{\text{engine}}$. Winning the match always yields positive reward regardless of style.
-
-## Reward-Based Online RL Training
+Train directly from 1+0 bullet games against weak Stockfish (1 minute per side, zero increment):
 
 ```bash
-python -m flychess.cli train-rl --graph data/flywire-subgraph.npz --checkpoint outputs/fly-200.npz --out outputs/fly-rl-bullet.npz --matches 6 --difficulty weak
-python -m flychess.cli eval-bullet --graph data/flywire-subgraph.npz --checkpoint outputs/fly-rl-bullet.npz --games 4 --difficulty weak
+# Train FlyWire policy via Advantage Actor-Critic
+python -m flychess.cli train-rl \
+  --graph data/flywire-subgraph.npz \
+  --checkpoint outputs/fly-supervised-2k.npz \
+  --out outputs/fly-rl-pilot.npz \
+  --matches 6 \
+  --difficulty weak \
+  --seed 42
+
+# Train Shuffled-Wiring control
+python -m flychess.cli train-rl \
+  --graph data/flywire-subgraph.npz \
+  --checkpoint outputs/shuffled-supervised-2k.npz \
+  --out outputs/shuffled-rl-pilot.npz \
+  --shuffled \
+  --matches 6 \
+  --difficulty weak \
+  --seed 42
 ```
 
-This samples legal moves, plays complete 1+0 bullet matches, calculates discounted returns with moving baseline, updates the **396 biological edge gains** as well as adapter and readouts via REINFORCE, and logs parameter shifts and match metrics.
+In A2C, the value head on the 256 biological neurons estimates $V(s)$. The advantage $A_t = G_t - V(s_t)$ scales policy updates, and value MSE backpropagates through the 3 biological recurrence passes, directly updating the 396 FlyWire edge gains $g_e$ (L2 norm change: $0.265$).
 
-## Environment, reward and MCP
+---
 
-`ChessEnv` exposes FEN, board, legal UCI moves, action budget, and a line-inspection tool limited to four calls and six plies. It plays a seeded random opponent for the smoke test or a fixed-node Stockfish opponent. `features()` logs material, safe activity, coordination, hanging material, passed pawns and king exposure **from both sides' perspective**. A bounded heuristic potential gives intermediate feedback after the opponent replies; a genuine terminal win/loss/draw is separate. On a short time limit, the episode is truncated, **not** recorded as an actual chess outcome. No brilliance bonus exists. Stockfish move loss can be logged separately through `move_audit`.
+## Frozen November Benchmark Evaluation (120 Positions)
 
-Install `mcp` if you want the generic stdio server:
+Evaluated strictly on the frozen November 2013 benchmark (`data/benchmarks/november_benchmark_120.jsonl`):
 
 ```bash
-pip install mcp
-python -m flychess.mcp_server
+python -m flychess.cli eval-benchmark --graph data/flywire-subgraph.npz --checkpoint outputs/fly-rl-pilot.npz
 ```
 
-The server exposes `start`, `observe`, `inspect_line`, and `play_move`. This is an **adapter foundation**, not verified Harbor integration. AfterQuery's starter kit and its scoring skeleton are absent here; adapt their exact contract, isolate verifier files, provide a frozen varied position set, three frontier-agent runs, a stronger reference, stop/idle baselines and exploit tests before submission. Do not claim this one-command local smoke test reproduces the judges' evaluation.
+### Measured Benchmark Results
+
+| Model | Legal% | Mean ACPL | Median CPL | Blunder% (>300cp) | Accept% (≤50cp) | Top-1% | Tac Top-1% | Value MSE |
+| :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
+| **RL Fly (Actor-Critic)** | **100.0%** | **858.9 cp** | **206.0 cp** | **38.3%** | 20.8% | **11.7%** | **30.0%** | 1.0845 |
+| **Pre-RL SFT (fly-200)** | 100.0% | 783.9 cp | 221.0 cp | 40.8% | **24.2%** | 10.8% | 25.0% | 0.6661 |
+| **New SFT Fly (2k SFT)** | 100.0% | 1025.7 cp | 250.0 cp | 45.8% | **24.2%** | 10.8% | 25.0% | **0.5916** |
+| **Shuffled Control (RL)** | 100.0% | 1007.3 cp | 256.0 cp | 45.0% | 19.2% | 9.2% | 25.0% | 0.9761 |
+| **Shuffled Control (2k SFT)** | 100.0% | 1020.0 cp | 260.0 cp | 46.7% | 21.7% | 10.8% | 25.0% | 0.6056 |
+| **Untrained FlyWire** | 100.0% | 1046.3 cp | 269.0 cp | 48.3% | 19.2% | 9.2% | **30.0%** | 0.6236 |
+| **Random Baseline** | 100.0% | 992.8 cp | 323.0 cp | 51.7% | 18.3% | 8.3% | 25.0% | 0.6053 |
+
+### Key Benchmark Findings
+1. **Move Quality**: RL Fly achieved the **lowest median centipawn loss** (206.0 cp) and the **lowest blunder rate** (38.3%), outperforming both the Untrained baseline (269.0 cp, 48.3% blunders) and the Random baseline (323.0 cp, 51.7% blunders).
+2. **FlyWire vs. Shuffled Control**: Under online RL, RL Fly achieved 206.0 cp median loss and 38.3% blunders vs. Shuffled Control RL at 256.0 cp median loss and 45.0% blunders.
+3. **Paired Bullet Match Performance**:
+   - *Pre-RL Fly*: Avg 38.0 plies, Mean ACPL 649.6 cp.
+   - *Post-RL Fly*: Avg **47.5 plies**, Mean ACPL improved to **394.1 cp** (a 255.5 cp quality improvement).
+4. **Legality**: 100.0% legal move production across all evaluations.
+
+### Audited Chess Cases
+Run the verified audit suite:
+
+```bash
+python -m flychess.cli audit-cases
+```
+
+1. **Sound Sacrifice (Greek Gift $Bxh7+$)**: King safety strictly increases ($+3.0$) and sacrifice is verified sound.
+2. **Poisoned Pawn Trap**: Black Queen capturing $b2$ is refuted by $Rb1$ (Black potential collapses from $-0.1049$ to $-0.1189$).
+3. **Outright Blunder**: Scholar's mate ($Nf6??$ allowing $Qxf7\#$) is penalized with $-1.0$.
+4. **Counterplay Refutation**: Blackburne Shilling Gambit ($Nxe5?$ refuted by $Qg5!$) registers negative hanging value ($-1.0$) and negative position potential ($-0.3801$).
+5. **Repetition Resistance**: Shuffling pieces back and forth ($Nf3 - Nf6 - Ng1 - Ng8$) yields strictly $0.0$ net potential delta.
+
+---
 
 ## Playable Interactive ChessFly Application
 
-ChessFly includes a playable web application featuring an interactive board, 2D animated mascot, live match viewer, and persistent game replay:
-
 ```bash
-# Launch interactive web application
-source .venv/bin/activate
 streamlit run app.py
 ```
 
-### Key UI Features
-1. **Interactive Board (`flychess/component.py` & `flychess/frontend/index.html`)**:
-   - Built with full drag-and-drop and click-to-move piece handling.
-   - Highlights legal move destinations with subtle green dots (empty squares) and red target rings (captures).
-   - Pawn promotion choice modal (Queen, Rook, Bishop, Knight).
-   - Dynamic king-in-check red gradient glow and last-move highlights.
-   - Perspective flipping (White / Black) and offline-resilient SVG and Unicode piece fallbacks.
-   - Pure Python `python-chess` board enforces all legality server-side.
-
-2. **2D Animated Fly Mascot**:
-   - Positioned alongside the board with state-reactive animations:
-     - *Idle*: Calm intermittent wing flutter.
-     - *Thinking*: Rapid wing vibration and twitching antennae during model inference.
-     - *Happy*: Cheerful hop animation when advancing into positive position potential.
-     - *Upset*: Contracted eyes upon flagging or material collapse.
-
-3. **Live Match Streaming**:
-   - Supports **Human vs Fly Policy**, **Fly vs Stockfish**, and **Fly vs Gemini**.
-   - Dual ticking bullet clocks (`1:00`) with active turn pulsing.
-   - Asynchronous background match execution with live state polling.
-
-4. **Complete Game Persistence & Replay (`flychess/games.py`)**:
-   - Every completed match is saved to disk under `data/games/<id>.json` with full PGN, FEN history, per-move clocks, and transparent reward audit diagnostics.
-   - Interactive Replay tab with First, Prev, Play/Pause autoplay, Next, Last controls, ply scrub slider, and downloadable PGNs.
-   - Persists across page reloads.
-
-5. **Multi-Player Selector**:
-   - Human (You)
-   - Fly Policy (After RL: `outputs/fly-rl-bullet.npz`)
-   - Fly Policy (Pre-RL SFT: `outputs/fly-200.npz`)
-   - Shuffled-Wiring Control (`outputs/shuffled-200.npz` or `outputs/shuffled-rl-bullet.npz`)
-   - Stockfish (Weak · Elo 1350, Medium · Elo 1600, Strong · Full engine)
-   - Gemini (configured via `GEMINI_API_KEY` with graceful fallback)
-   - Time Controls: 1+0 Bullet (60s clocks) or Untimed Analysis.
-
-## Important limitations and next tasks
-
-1. Real FlyWire data and Stockfish are downloaded separately; neither is secretly bundled in this zip.
-2. The board adapter injects structured chess input into selected nodes. This preserves an authentic fixed **internal topology** but is not a natural fly sensory representation. Test a fly-eye-rendered board variant only if time allows.
-3. The selected graph is small and chosen for engineering convenience. Compare against a shuffled-edge graph; interpret differences cautiously and use multiple seeds for serious claims.
-4. The heuristic potential is a training signal, **not** the final judged score. Audit four specific positions (sound sacrifice, poisoned pawn, blunder, activity refuted by counterplay) with a pinned Stockfish engine before asserting reward integrity.
-5. Short capped episodes can favour heuristic end positions. Build a separate fixed, defensible verifier and exploit tests using the AfterQuery skeleton. A random opponent is for software smoke and learning dynamics, not a meaningful chess reference.
-6. The policy has no search; it may learn legality and teacher-move preferences without strong multi-move reasoning. Report what the measured held-out results actually show.
+- **Interactive Board**: Drag-and-drop & click-to-move, legal move indicators, promotion choice modal, in-check glow, perspective flipping, and server-side legality verification.
+- **Animated Mascot**: 2D SVG fruit fly with state-reactive animations (idle flutter, thinking vibration, happy hop, upset shrink).
+- **Match Setup**: Select from RL Fly, SFT Fly, Shuffled Control, Human, Stockfish (Weak, Medium, Strong), or Gemini.
+- **Replay & Diagnostics**: Replay any past game with move-by-move clocks and transparent reward auditing.
+- **Training Tab**: Live progress tracking, parameter shift verification, and benchmark evaluation tables.

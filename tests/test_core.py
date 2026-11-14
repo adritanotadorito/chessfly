@@ -100,6 +100,35 @@ class CoreTests(unittest.TestCase):
         mate = chess.Board("7k/6Q1/6K1/8/8/8/8/8 b - - 0 1")
         self.assertEqual(result_value(mate, chess.WHITE), 1.0)
 
+    def test_value_head_and_soft_target_gradients(self):
+        model = FlyPolicy(self.graph)
+        board = chess.Board()
+        val = model.predict_value(board)
+        self.assertIsInstance(val, float)
+        self.assertGreaterEqual(val, -1.0)
+        self.assertLessEqual(val, 1.0)
+
+        legal = list(board.legal_moves)
+        soft_targets = np.zeros(len(legal), dtype=np.float32)
+        soft_targets[0] = 0.7
+        soft_targets[1] = 0.3
+        target_val = 0.45
+
+        loss, grads = model.gradients(board, target_probs=soft_targets, value_target=target_val)
+        self.assertGreater(loss, 0.0)
+        self.assertIn("value_w", grads)
+        self.assertIn("value_b", grads)
+        self.assertIn("gain", grads)
+        # Biological gains must receive non-zero gradients
+        self.assertTrue(np.any(grads["gain"] != 0.0))
+        self.assertTrue(np.any(grads["value_w"] != 0.0))
+
+        # Model update should change biological gains
+        initial_gains = model.params["gain"].copy()
+        model.update(grads, lr=0.01)
+        self.assertFalse(np.allclose(model.params["gain"], initial_gains))
+
+
 
 if __name__ == "__main__":
     unittest.main()

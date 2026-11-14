@@ -11,7 +11,9 @@ from .match import BulletMatch
 from .reward import compute_game_rewards
 from .train import (generate, train_supervised, train_reinforce, read_examples,
                     accuracy, evaluate_heldout, evaluate_move_quality,
-                    train_rl_bullet, evaluate_bullet_matches)
+                    train_rl_bullet, evaluate_bullet_matches,
+                    train_supervised_pilot, evaluate_frozen_benchmark,
+                    evaluate_audited_chess_cases)
 
 
 def main():
@@ -43,6 +45,18 @@ def main():
     train.add_argument("--lr", type=float, default=0.002)
     train.add_argument("--seed", type=int, default=7)
     train.add_argument("--eval-stockfish")
+    
+    tpilot = sub.add_parser("train-pilot", help="Train supervised distillation pilot on Jan-Sep data with Oct validation")
+    tpilot.add_argument("--graph", required=True)
+    tpilot.add_argument("--train", default="data/training/train_2000.jsonl")
+    tpilot.add_argument("--val", default="data/training/val_oct_200.jsonl")
+    tpilot.add_argument("--out", required=True)
+    tpilot.add_argument("--epochs", type=int, default=5)
+    tpilot.add_argument("--seed", type=int, default=42)
+    tpilot.add_argument("--shuffled", action="store_true")
+    tpilot.add_argument("--lr", type=float, default=0.002)
+    tpilot.add_argument("--value-weight", type=float, default=0.5)
+
     rl = sub.add_parser("reinforce")
     rl.add_argument("--graph", required=True)
     rl.add_argument("--checkpoint", required=True)
@@ -64,7 +78,7 @@ def main():
     bullet.add_argument("--difficulty", choices=("weak", "medium", "strong"), default="weak")
     bullet.add_argument("--shuffled", action="store_true")
     bullet.add_argument("--pgn-out")
-    trl = sub.add_parser("train-rl", help="Run real online policy-gradient training from bullet games")
+    trl = sub.add_parser("train-rl", help="Run online Advantage Actor-Critic training from bullet games")
     trl.add_argument("--graph", required=True)
     trl.add_argument("--checkpoint", required=True)
     trl.add_argument("--out", required=True)
@@ -81,6 +95,19 @@ def main():
     ebullet.add_argument("--stockfish", default="/opt/homebrew/bin/stockfish")
     ebullet.add_argument("--difficulty", choices=("weak", "medium", "strong"), default="weak")
     ebullet.add_argument("--shuffled", action="store_true")
+
+    ebench = sub.add_parser("eval-benchmark", help="Evaluate model on frozen November benchmark")
+    ebench.add_argument("--graph", required=True)
+    ebench.add_argument("--checkpoint")
+    ebench.add_argument("--benchmark", default="data/benchmarks/november_benchmark_120.jsonl")
+    ebench.add_argument("--stockfish", default="/opt/homebrew/bin/stockfish")
+    ebench.add_argument("--shuffled", action="store_true")
+
+    audit = sub.add_parser("audit-cases", help="Audit the 4 specific chess scenarios & repetition resistance")
+    audit.add_argument("--graph")
+    audit.add_argument("--checkpoint")
+    audit.add_argument("--shuffled", action="store_true")
+
     args = p.parse_args()
     if args.cmd == "fixture":
         make_fixture(args.out)
@@ -119,6 +146,19 @@ def main():
                                           args.epochs, seed=args.seed,
                                           shuffled=args.shuffled, lr=args.lr,
                                           eval_engine=args.eval_stockfish), indent=2))
+    elif args.cmd == "train-pilot":
+        res = train_supervised_pilot(
+            graph=args.graph,
+            train_path=args.train,
+            val_path=args.val,
+            output=args.out,
+            epochs=args.epochs,
+            seed=args.seed,
+            shuffled=args.shuffled,
+            lr=args.lr,
+            value_weight=args.value_weight
+        )
+        print(json.dumps(res, indent=2))
     elif args.cmd == "reinforce":
         print(json.dumps(train_reinforce(args.graph, args.checkpoint, args.out,
                          args.episodes, opponent=args.opponent, stockfish=args.stockfish), indent=2))
@@ -165,6 +205,19 @@ def main():
         model.load_weights(args.checkpoint)
         res = evaluate_bullet_matches(model, stockfish_path=args.stockfish,
                                       num_games=args.games, bot_difficulty=args.difficulty)
+        print(json.dumps(res, indent=2))
+    elif args.cmd == "eval-benchmark":
+        model = FlyPolicy(args.graph, shuffled=args.shuffled)
+        if args.checkpoint:
+            model.load_weights(args.checkpoint)
+        res = evaluate_frozen_benchmark(model, benchmark_path=args.benchmark, stockfish_path=args.stockfish)
+        print(json.dumps(res, indent=2))
+    elif args.cmd == "audit-cases":
+        model = None
+        if args.graph and args.checkpoint:
+            model = FlyPolicy(args.graph, shuffled=args.shuffled)
+            model.load_weights(args.checkpoint)
+        res = evaluate_audited_chess_cases(model)
         print(json.dumps(res, indent=2))
 
 
