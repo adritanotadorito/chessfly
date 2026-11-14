@@ -1,0 +1,3 @@
+numpy>=1.26,<3
+python-chess==1.999
+# Optional for the MCP server: pip install mcp
