@@ -1,0 +1,6 @@
+{
+  "dataset": "data/teacher-200.jsonl",
+  "note": "200-game dataset with best-epoch checkpointing and Stockfish 19 move quality audit",
+  "fly_checkpoint": "outputs/fly-200.npz",
+  "shuffled_checkpoint": "outputs/shuffled-200.npz"
+}

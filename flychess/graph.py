@@ -88,6 +88,13 @@ def make_fixture(out_path: str):
 def load_graph(path: str, shuffled: bool = False, seed: int = 42):
     data = np.load(path, allow_pickle=False)
     src, dst = data["src"].copy(), data["dst"].copy()
+    weight = data["weight"].copy()
+    num_nodes = len(data["root_ids"])
     if shuffled:
-        dst = dst[np.random.default_rng(seed).permutation(len(dst))]
-    return src, dst, data["weight"].copy(), json.loads(str(data["meta"])), len(data["root_ids"])
+        rng = np.random.default_rng(seed)
+        dst = dst[rng.permutation(len(dst))]
+        # Re-normalize incoming edge weights so sum of incoming weights per destination node
+        # equals 1.0 (matching the biological graph scaling and preventing tanh saturation/vanishing gradients).
+        incoming = np.bincount(dst, weights=weight, minlength=num_nodes)
+        weight = (weight / np.maximum(incoming[dst], 1e-8)).astype(np.float32)
+    return src, dst, weight, json.loads(str(data["meta"])), num_nodes

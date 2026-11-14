@@ -30,11 +30,11 @@ class FlyPolicy:
         self.m = {k: np.zeros_like(v) for k, v in self.params.items()}
         self.v = {k: np.zeros_like(v) for k, v in self.params.items()}
 
-    def forward(self, board: chess.Board):
+    def forward(self, board: chess.Board, my_clock: float = None, opp_clock: float = None):
         legal = list(board.legal_moves)
         if not legal:
             raise ValueError("No legal moves in terminal position")
-        features = encode(board)
+        features = encode(board, my_clock=my_clock, opp_clock=opp_clock)
         x = np.tanh(self.params["adapter"] @ features + self.params["adapter_bias"])
         states = [x]
         for _ in range(self.passes):
@@ -49,13 +49,15 @@ class FlyPolicy:
         probs /= probs.sum()
         return legal, logits, probs, (features, states, parts, vectors)
 
-    def choose(self, board: chess.Board, sample: bool = False):
-        legal, _, probs, _ = self.forward(board)
+    def choose(self, board: chess.Board, sample: bool = False, my_clock: float = None, opp_clock: float = None):
+        legal, _, probs, _ = self.forward(board, my_clock=my_clock, opp_clock=opp_clock)
         idx = self.rng.choice(len(legal), p=probs) if sample else int(np.argmax(probs))
         return legal[idx]
 
-    def gradients(self, board: chess.Board, target: chess.Move, scale: float = 1.0):
-        legal, logits, probs, (features, states, parts, vectors) = self.forward(board)
+    def gradients(self, board: chess.Board, target: chess.Move, scale: float = 1.0,
+                  my_clock: float = None, opp_clock: float = None):
+        legal, logits, probs, (features, states, parts, vectors) = self.forward(
+            board, my_clock=my_clock, opp_clock=opp_clock)
         if target not in legal:
             raise ValueError(f"Teacher move {target.uci()} is illegal in {board.fen()}")
         idx = legal.index(target)
@@ -104,12 +106,33 @@ class FlyPolicy:
                 or header["passes"] != self.passes or header["edges"] != len(self.src)):
             raise ValueError("Checkpoint graph/config does not match")
         for k in self.params:
-            if data[f"p_{k}"].shape != self.params[k].shape:
-                raise ValueError(f"Shape mismatch for {k}")
-            self.params[k] = data[f"p_{k}"].copy()
+            param_data = data[f"p_{k}"]
+            # Support backward compatibility and safe migration from 783-dim inputs
+            if k == "adapter" and param_data.shape == (self.n, 783) and self.params["adapter"].shape == (self.n, DIM):
+                padded = np.pad(param_data, ((0, 0), (0, DIM - 783)), mode="constant", constant_values=0.0)
+                self.params["adapter"] = padded.astype(np.float32)
+            elif param_data.shape != self.params[k].shape:
+                raise ValueError(f"Shape mismatch for {k}: file has {param_data.shape}, expected {self.params[k].shape}")
+            else:
+                self.params[k] = param_data.copy()
 
 
-def summarize(board: chess.Board, model: FlyPolicy, top: int = 5):
-    legal, logits, probs, _ = model.forward(board)
+def migrate_checkpoint(source_path: str, dest_path: str):
+    """Safely migrate legacy 783-dim adapter checkpoint to 785-dim clock representation without touching the source."""
+    data = np.load(source_path, allow_pickle=False)
+    header = json.loads(str(data["header"]))
+    saved_params = {}
+    for k in ["adapter", "adapter_bias", "gain", "from", "to", "promo"]:
+        v = data[f"p_{k}"]
+        if k == "adapter" and v.shape[1] == 783:
+            v = np.pad(v, ((0, 0), (0, 2)), mode="constant", constant_values=0.0).astype(np.float32)
+        saved_params[f"p_{k}"] = v
+    header["dim"] = DIM
+    header["migrated_clock_inputs"] = True
+    np.savez_compressed(dest_path, header=json.dumps(header), **saved_params)
+
+
+def summarize(board: chess.Board, model: FlyPolicy, top: int = 5, my_clock: float = None, opp_clock: float = None):
+    legal, logits, probs, _ = model.forward(board, my_clock=my_clock, opp_clock=opp_clock)
     indices = np.argsort(-probs)[:top]
     return [(legal[i].uci(), round(float(probs[i]), 4)) for i in indices]

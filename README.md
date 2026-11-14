@@ -47,13 +47,53 @@ python -m flychess.cli heldout --graph data/flywire-subgraph.npz --dataset data/
 
 The report shows initial and post-training held-out top-move agreement. A small or absent gain means the experiment did not demonstrate useful learning. Matching the teacher is a **warm start**, not RL and not proof of chess strength. The dataset generator uses random openings; it is **not** the curated AfterQuery challenge set.
 
-## Optional small RL experiment
+## 1+0 Bullet Matches and Transparent Chess Rewards
+
+### Bullet Match Runner (1+0)
+- **Time control**: 1 minute per side, zero increment (60s + 0s).
+- **Clock**: Timed strictly with `time.perf_counter()` before and after move requests.
+- **Rules**: Checkmate, stalemate, threefold repetition, 50-move rule, and timeout flagging with insufficient-material draw verification (`board.has_insufficient_material`).
+- **Engine settings**: Stockfish 19 (`/opt/homebrew/bin/stockfish`). Weaker bot setting for training: `{"Skill Level": 0, "UCI_LimitStrength": True, "UCI_Elo": 1350, "Threads": 1, "Hash": 16}`. Pondering disabled. Clocks passed via `chess.engine.Limit(white_clock=..., black_clock=..., white_inc=0, black_inc=0)`.
+
+### Transparent Chess Reward Formula
+To prevent reward farming (e.g. piece-shuffling or check spamming), the reward uses potential-based shaping with strict terminal outcome dominance:
+
+1. **Side-relative interpretable features** $f(s, c)$:
+   - **Material** ($P=1.0, N=3.1, B=3.3, R=5.0, Q=9.0$): Weight $0.45$
+   - **Hanging Pieces / Exposure**: Weight $0.22$
+   - **King Safety** (pawn shield shelter + king zone threat count): Weight $0.15$
+   - **Passed Pawns** (scaled by advance rank): Weight $0.10$
+   - **Safe Activity** (moves not into enemy pawn control): Weight $0.04$
+   - **Coordination** (defended friendly pieces): Weight $0.04$
+   - **Direct Threats** against higher-value pieces: Weight $0.05$
+   - **Clock Advantage** ($\frac{t_{\text{my}} - t_{\text{opp}}}{60.0}$): Weight $0.03$
+   - **Time Pressure Penalty** ($t_{\text{my}} < 10\text{s}$): Weight $0.02$
+
+2. **Bounded Position Potential**:
+   $$\Phi(s, c) = \tanh\left(\frac{\sum_i w_i f_i(s, c)}{6.0}\right) \in (-1.0, 1.0)$$
+   Terminal states: $\Phi(s_{\text{terminal}}) = 0$.
+
+3. **Transition Reward (After Opponent's Strong Response)**:
+   $$\Delta \Phi_t = 0.15 \times (0.99 \Phi(s_{t+1}, c) - \Phi(s_t, c))$$
+   Evaluating $\Phi$ after the opponent's reply guarantees that flashy sacrifices are tested against the opponent's counterplay.
+
+4. **Bounded Post-Game Stockfish Move Regret**:
+   Evaluated at a fixed 1,500 nodes/move:
+   $$\text{Penalty}_{\text{engine}} = \min\left(0.10, \frac{1}{M} \sum_{t=1}^M \frac{\max(0, \text{best\_cp}_t - \text{chosen\_cp}_t)}{1500.0}\right)$$
+   The engine penalty cannot exceed $0.10$ across the entire game.
+
+5. **Terminal Outcome Dominance**:
+   $$R_{\text{terminal}} = +1.0\ (\text{win}),\ 0.0\ (\text{draw}),\ -1.0\ (\text{loss or flag})$$
+   Total return is dominated by $R_{\text{terminal}} \pm 0.15 - \text{Penalty}_{\text{engine}}$. Winning the match always yields positive reward regardless of style.
+
+## Reward-Based Online RL Training
 
 ```bash
-python -m flychess.cli reinforce --graph data/flywire-subgraph.npz --checkpoint outputs/fly.npz --out outputs/fly-rl.npz --episodes 30
+python -m flychess.cli train-rl --graph data/flywire-subgraph.npz --checkpoint outputs/fly-200.npz --out outputs/fly-rl-bullet.npz --matches 6 --difficulty weak
+python -m flychess.cli eval-bullet --graph data/flywire-subgraph.npz --checkpoint outputs/fly-rl-bullet.npz --games 4 --difficulty weak
 ```
 
-This uses REINFORCE with sampled legal moves and a fixed seeded random opponent. It updates the same graph edge gains, adapter and readout. Compare `fly-rl.npz` against `fly.npz` on **held-out** positions and against a stronger opponent before claiming improvement. Use `--opponent stockfish --stockfish /path/to/stockfish` for stronger training, but this small codebase has no GPU optimization or claim of useful RL performance.
+This samples legal moves, plays complete 1+0 bullet matches, calculates discounted returns with moving baseline, updates the **396 biological edge gains** as well as adapter and readouts via REINFORCE, and logs parameter shifts and match metrics.
 
 ## Environment, reward and MCP
 

@@ -74,6 +74,26 @@ class CoreTests(unittest.TestCase):
         s2, d2, _, _, _ = load_graph(out, shuffled=True)
         np.testing.assert_array_equal(np.bincount(src, minlength=n), np.bincount(s2, minlength=n))
         np.testing.assert_array_equal(np.bincount(dst, minlength=n), np.bincount(d2, minlength=n))
+        # Verify that incoming weight sums in shuffled graph are normalized to 1.0 on active nodes
+        _, d_shuf, w_shuf, _, _ = load_graph(out, shuffled=True)
+        in_weights = np.bincount(d_shuf, weights=w_shuf, minlength=n)
+        active = np.bincount(d_shuf, minlength=n) > 0
+        np.testing.assert_allclose(in_weights[active], 1.0, rtol=1e-5)
+
+    def test_heldout_multi_metric_evaluation(self):
+        from flychess.train import evaluate_heldout
+        model = FlyPolicy(self.graph)
+        examples = [
+            {"fen": chess.STARTING_FEN, "teacher_move": "e2e4"},
+            {"fen": "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq e3 0 1", "teacher_move": "c7c5"}
+        ]
+        res = evaluate_heldout(model, examples)
+        self.assertIn("top1", res)
+        self.assertIn("top3", res)
+        self.assertIn("top5", res)
+        self.assertIn("loss", res)
+        self.assertIn("mean_potential_delta", res)
+        self.assertEqual(res["total"], 2)
 
     def test_result_and_bounded_potential(self):
         self.assertLess(abs(potential(chess.Board(), chess.WHITE)), 1.0)
