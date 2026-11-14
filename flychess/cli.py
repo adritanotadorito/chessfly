@@ -15,7 +15,9 @@ from .train import (generate, train_supervised, train_reinforce, read_examples,
                     train_supervised_pilot, evaluate_frozen_benchmark,
                     evaluate_audited_chess_cases)
 from .puzzle import (build_puzzle_pilot, evaluate_model_on_puzzles,
-                     train_supervised_puzzles, train_puzzle_rl_episodes)
+                     train_supervised_puzzles, train_puzzle_rl_episodes,
+                     build_puzzle_10k_dataset, train_supervised_puzzle_10k,
+                     compare_puzzle_evaluations)
 
 
 def main():
@@ -145,6 +147,30 @@ def main():
     rlpuzz.add_argument("--lr", type=float, default=0.001)
     rlpuzz.add_argument("--seed", type=int, default=42)
     rlpuzz.add_argument("--shuffled", action="store_true")
+
+    # 10k Puzzle commands
+    b10k = sub.add_parser("build-puzzles-10k", help="Stream & build 12,000 balanced puzzle splits from lichess_db_puzzle.csv.zst")
+    b10k.add_argument("--csv", default="data/lichess/lichess_db_puzzle.csv.zst")
+    b10k.add_argument("--november", default="data/benchmarks/november_benchmark_120.jsonl")
+    b10k.add_argument("--october-val", default="data/training/val_oct_200.jsonl")
+    b10k.add_argument("--out-dir", default="data/puzzles_10k")
+    b10k.add_argument("--train-per-bucket", type=int, default=2000)
+    b10k.add_argument("--val-per-bucket", type=int, default=200)
+    b10k.add_argument("--test-per-bucket", type=int, default=200)
+    b10k.add_argument("--seed", type=int, default=42)
+
+    t10k = sub.add_parser("train-puzzles-10k", help="Supervised training on 10k puzzles interleaved with 2k chess positions")
+    t10k.add_argument("--graph", required=True)
+    t10k.add_argument("--parent", required=True)
+    t10k.add_argument("--train-puzzles", default="data/puzzles_10k/train_puzzles_10k.jsonl")
+    t10k.add_argument("--val-puzzles", default="data/puzzles_10k/val_puzzles_1000.jsonl")
+    t10k.add_argument("--oct-val", default="data/training/val_oct_200.jsonl")
+    t10k.add_argument("--train-chess", default="data/training/train_2000.jsonl")
+    t10k.add_argument("--out", required=True)
+    t10k.add_argument("--epochs", type=int, default=5)
+    t10k.add_argument("--lr", type=float, default=0.001)
+    t10k.add_argument("--seed", type=int, default=42)
+    t10k.add_argument("--shuffled", action="store_true")
 
     args = p.parse_args()
     if args.cmd == "fixture":
@@ -292,6 +318,33 @@ def main():
             train_file=args.train,
             output_path=args.out,
             episodes=args.episodes,
+            lr=args.lr,
+            seed=args.seed,
+            shuffled=args.shuffled,
+        )
+        print(json.dumps(res, indent=2))
+    elif args.cmd == "build-puzzles-10k":
+        manifest = build_puzzle_10k_dataset(
+            csv_zst_path=args.csv,
+            november_path=args.november,
+            october_val_path=args.october_val,
+            output_dir=args.out_dir,
+            target_train_per_bucket=args.train_per_bucket,
+            target_val_per_bucket=args.val_per_bucket,
+            target_test_per_bucket=args.test_per_bucket,
+            seed=args.seed,
+        )
+        print(json.dumps(manifest, indent=2))
+    elif args.cmd == "train-puzzles-10k":
+        res = train_supervised_puzzle_10k(
+            graph=args.graph,
+            parent_checkpoint=args.parent,
+            train_puzzle_path=args.train_puzzles,
+            val_puzzle_path=args.val_puzzles,
+            oct_val_path=args.oct_val,
+            train_chess_path=args.train_chess,
+            output_path=args.out,
+            epochs=args.epochs,
             lr=args.lr,
             seed=args.seed,
             shuffled=args.shuffled,

@@ -4,6 +4,8 @@
 /data/training/
 /data/bulk/
 /data/games/
+/data/puzzles_10k/*.jsonl
+/scratch/
 __pycache__/
 *.pyc
 .env

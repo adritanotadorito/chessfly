@@ -11,6 +11,7 @@ from flychess.graph import make_fixture
 from flychess.model import FlyPolicy
 from flychess.puzzle import (
     check_forced_mate_in_two,
+    compare_puzzle_evaluations,
     evaluate_model_on_puzzles,
     find_all_mate_in_one_moves,
     stream_lichess_puzzles,
@@ -94,6 +95,50 @@ class PuzzleTests(unittest.TestCase):
                 fens_test.add(" ".join(d["solver_fen"].split()[:4]))
 
         self.assertEqual(len(fens_train & fens_test), 0)
+
+    def test_compare_puzzle_evaluations_consistency(self):
+        """Verify mathematical consistency where paired mean difference matches difference of means."""
+        eval_a = {
+            "accuracy": 0.6,
+            "mean_loss": 1.2,
+            "per_puzzle": [
+                {"puzzle_id": "p1", "game_id": "g1", "correct": 1},
+                {"puzzle_id": "p2", "game_id": "g1", "correct": 0},
+                {"puzzle_id": "p3", "game_id": "g2", "correct": 1},
+                {"puzzle_id": "p4", "game_id": "g3", "correct": 1},
+                {"puzzle_id": "p5", "game_id": "g4", "correct": 0},
+            ],
+            "per_game": {
+                "g1": {"accuracy": 0.5},
+                "g2": {"accuracy": 1.0},
+                "g3": {"accuracy": 1.0},
+                "g4": {"accuracy": 0.0},
+            }
+        }
+        eval_b = {
+            "accuracy": 0.4,
+            "mean_loss": 1.5,
+            "per_puzzle": [
+                {"puzzle_id": "p1", "game_id": "g1", "correct": 1},
+                {"puzzle_id": "p2", "game_id": "g1", "correct": 1},
+                {"puzzle_id": "p3", "game_id": "g2", "correct": 0},
+                {"puzzle_id": "p4", "game_id": "g3", "correct": 0},
+                {"puzzle_id": "p5", "game_id": "g4", "correct": 0},
+            ],
+            "per_game": {
+                "g1": {"accuracy": 1.0},
+                "g2": {"accuracy": 0.0},
+                "g3": {"accuracy": 0.0},
+                "g4": {"accuracy": 0.0},
+            }
+        }
+        cmp = compare_puzzle_evaluations(eval_a, eval_b, "ModelA", "ModelB")
+        self.assertTrue(cmp["mathematical_consistency"])
+        self.assertAlmostEqual(cmp["paired_puzzle_mean_diff"], 0.2)
+        self.assertAlmostEqual(cmp["diff_of_puzzle_means"], 0.2)
+        self.assertEqual(cmp["a_wins_puzzles"], 2)
+        self.assertEqual(cmp["b_wins_puzzles"], 1)
+        self.assertEqual(cmp["puzzle_ties"], 2)
 
 
 if __name__ == "__main__":

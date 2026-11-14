@@ -679,6 +679,7 @@ def evaluate_frozen_benchmark(model: FlyPolicy,
         "acceptable_move_rate": round(acceptable / n, 4),
         "top1_accuracy": round(top1_matches / n, 4),
         "value_mse": round(float(np.mean(value_errors)), 4),
+        "all_cpl": all_cpl,
         "representative_positions": {
             "count": len(rep_cpl),
             "mean_acpl": round(float(np.mean(rep_cpl)), 1),

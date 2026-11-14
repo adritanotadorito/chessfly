@@ -1,0 +1,62 @@
+{
+  "dataset": "lichess_puzzle_10k_splits",
+  "scanned_rows": 281662,
+  "rejected_invalid": 0,
+  "rejected_benchmark_overlap": 0,
+  "rejected_duplicate_solver_fen": 22,
+  "filter_criteria": {
+    "min_rating": 800,
+    "max_rating": 1850,
+    "min_popularity": 80,
+    "min_plays": 30,
+    "seed": 42
+  },
+  "total_train": 10000,
+  "total_val": 1000,
+  "total_frozen_test": 1000,
+  "train_by_bucket": {
+    "mateIn1": 2000,
+    "mateIn2": 2000,
+    "defense_equality": 2000,
+    "hanging_fork": 2000,
+    "advantage_quiet": 2000
+  },
+  "val_by_bucket": {
+    "mateIn1": 200,
+    "mateIn2": 200,
+    "defense_equality": 200,
+    "hanging_fork": 200,
+    "advantage_quiet": 200
+  },
+  "test_by_bucket": {
+    "mateIn1": 200,
+    "mateIn2": 200,
+    "defense_equality": 200,
+    "hanging_fork": 200,
+    "advantage_quiet": 200
+  },
+  "unique_games": {
+    "train": 4429,
+    "val": 1000,
+    "test": 1000,
+    "overlap_train_val": 0,
+    "overlap_train_test": 0,
+    "overlap_val_test": 0
+  },
+  "fen_overlap": {
+    "overlap_train_val": 0,
+    "overlap_train_test": 0,
+    "overlap_val_test": 0
+  },
+  "final_test_mateIn2_forced_mate": {
+    "total_mateIn2_test": 200,
+    "guaranteed_forced_mate_count": 200,
+    "guaranteed_forced_mate_rate": 1.0,
+    "solution_line_only_count": 0
+  },
+  "paths": {
+    "train": "data/puzzles_10k/train_puzzles_10k.jsonl",
+    "val": "data/puzzles_10k/val_puzzles_1000.jsonl",
+    "test": "data/puzzles_10k/test_puzzles_frozen_1000.jsonl"
+  }
+}
