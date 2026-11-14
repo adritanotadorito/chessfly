@@ -89,13 +89,12 @@ The reward system provides an interpretable, bounded potential $\Phi(s) \in (-1,
 ### Transition Reward & Engine Regret
 - **Intermediate Transition Reward**: Evaluated strictly **after the opponent's reply**:
   $$\Delta \Phi_t = 0.15 \times (0.99 \Phi(s_{t+1}) - \Phi(s_t))$$
-- **Bounded Centipawn Regret Penalty**:
-  - $0.0$ for loss $\le 20$ cp (sound moves)
-  - Up to $-0.05$ for small inaccuracy ($20 < \text{loss} \le 100$ cp)
-  - $-0.05$ to $-0.20$ for mistakes ($100 < \text{loss} \le 300$ cp)
-  - $-0.20$ to $-0.50$ for tactical blunders ($\text{loss} > 300$ cp)
+- **Bounded Centipawn Regret Penalty (Capped at $\le 0.10$ per game)**:
+  - Raw per-move penalty: $0.0$ for loss $\le 20$ cp, up to $-0.05$ for $20 < \text{loss} \le 100$ cp, $-0.05$ to $-0.20$ for $100 < \text{loss} \le 300$ cp, and $-0.20$ to $-0.50$ for blunders $> 300$ cp.
+  - **Applied Regret Cap**: The total sum of regret penalties actually passed to training gradients is strictly capped at $\le 0.10$ per game while preserving proportional per-move attribution ($s = 0.10 / |\sum p_i|$).
 - **Terminal Outcome Dominance**:
   $$R_{\text{terminal}} = +1.0\ (\text{win}),\ 0.0\ (\text{draw}),\ -1.0\ (\text{loss})$$
+  Because total regret is capped at $0.10$, a win ($R_{\text{total}} \ge +0.75$) strictly dominates a draw ($R_{\text{total}} \approx 0.0$), even after multiple tactical blunders.
 
 ---
 
@@ -178,11 +177,12 @@ python -m flychess.cli eval-benchmark --graph data/flywire-subgraph.npz --checkp
 | **Random Baseline** | 100.0% | 992.8 cp | 323.0 cp | 51.7% | 18.3% | 8.3% | 25.0% | 0.6053 |
 
 ### Key Benchmark Findings
-1. **Move Quality**: RL Fly achieved the **lowest median centipawn loss** (206.0 cp) and the **lowest blunder rate** (38.3%), outperforming both the Untrained baseline (269.0 cp, 48.3% blunders) and the Random baseline (323.0 cp, 51.7% blunders).
-2. **FlyWire vs. Shuffled Control**: Under online RL, RL Fly achieved 206.0 cp median loss and 38.3% blunders vs. Shuffled Control RL at 256.0 cp median loss and 45.0% blunders.
-3. **Paired Bullet Match Performance**:
-   - *Pre-RL Fly*: Avg 38.0 plies, Mean ACPL 649.6 cp.
-   - *Post-RL Fly*: Avg **47.5 plies**, Mean ACPL improved to **394.1 cp** (a 255.5 cp quality improvement).
+1. **Move Quality & Blunder Reduction**: RL Fly achieved the **lowest median centipawn loss** (206.0 cp) and the **lowest blunder rate** (38.3%), improving over Untrained (269.0 cp, 48.3% blunders). However, the earlier supervised baseline `fly-200.npz` retains the lowest mean ACPL overall (783.9 cp vs. 858.9 cp for RL Fly).
+2. **Paired Per-Position Comparison (120 Frozen November Positions)**:
+   - *Fly RL vs. SFT-2k Parent*: 48 strictly improved, 51 strictly worsened, 21 tied. Under $\pm 50$ cp threshold: 30 improved, 30 worsened, 60 tied (mean paired difference $-87.3$ cp).
+   - *Shuffled RL vs. Shuffled SFT Parent*: 57 strictly improved, 40 strictly worsened, 23 tied. Under $\pm 50$ cp threshold: 23 improved, 21 worsened, 76 tied (mean paired difference $-16.7$ cp).
+3. **Bullet Matches vs. Weak Stockfish**:
+   - In 1+0 bullet matches, RL Fly demonstrated longer defensive resistance (avg 47.5 plies vs. 38.0 plies pre-RL) and lower in-game ACPL (394.1 cp vs. 649.6 cp), though RL Fly won 0 of 10 competitive games (6 training + 4 eval).
 4. **Legality**: 100.0% legal move production across all evaluations.
 
 ### Audited Chess Cases
@@ -192,7 +192,7 @@ Run the verified audit suite:
 python -m flychess.cli audit-cases
 ```
 
-1. **Sound Sacrifice (Greek Gift $Bxh7+$)**: King safety strictly increases ($+3.0$) and sacrifice is verified sound.
+1. **Greek Gift Heuristic ($Bxh7+$)**: King safety feature increases ($+3.0$) reflecting stripped king shelter and attacker density (feature heuristic; Stockfish at nodes=15000 prefers $Nexd4$ $+175$ cp).
 2. **Poisoned Pawn Trap**: Black Queen capturing $b2$ is refuted by $Rb1$ (Black potential collapses from $-0.1049$ to $-0.1189$).
 3. **Outright Blunder**: Scholar's mate ($Nf6??$ allowing $Qxf7\#$) is penalized with $-1.0$.
 4. **Counterplay Refutation**: Blackburne Shilling Gambit ($Nxe5?$ refuted by $Qg5!$) registers negative hanging value ($-1.0$) and negative position potential ($-0.3801$).

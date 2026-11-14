@@ -698,7 +698,9 @@ def evaluate_audited_chess_cases(model: FlyPolicy = None) -> dict:
     """Evaluate the 4 specific audited chess scenarios and repetition resistance."""
     results = {}
 
-    # Case 1: Sound Greek Gift Bishop Sacrifice Bxh7+
+    # Case 1: Greek Gift Bishop Sacrifice Bxh7+ (Heuristic King Safety)
+    # Note: Audited engine analysis shows Stockfish at nodes=15000 prefers Nexd4 (+175cp).
+    # This evaluates the transparent king safety heuristic (+3.0 shelter strip), not engine proof.
     b1 = chess.Board("r1bq1rk1/pp1n1ppp/2n1p3/2bpP3/3p1B2/2PB1N2/PP2NPPP/R2Q1RK1 w - - 0 10")
     f1_before = features(b1, chess.WHITE)
     phi1_before = potential(b1, chess.WHITE)
@@ -708,8 +710,10 @@ def evaluate_audited_chess_cases(model: FlyPolicy = None) -> dict:
     f1_after = features(b1_after, chess.WHITE)
     phi1_after = potential(b1_after, chess.WHITE)
     results["case_1_sound_sacrifice"] = {
+        "description": "Greek Gift Bxh7+ heuristic shelter strip",
         "king_safety_increase": round(f1_after["king_safety"] - f1_before["king_safety"], 2),
-        "sound": (f1_after["king_safety"] > f1_before["king_safety"]),
+        "shelter_stripped": (f1_after["king_safety"] > f1_before["king_safety"]),
+        "sound": (f1_after["king_safety"] > f1_before["king_safety"]),  # backward-compatible key
     }
 
     # Case 2: Poisoned Pawn / Queen trapped on b2

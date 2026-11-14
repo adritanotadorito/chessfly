@@ -14,6 +14,8 @@ from .train import (generate, train_supervised, train_reinforce, read_examples,
                     train_rl_bullet, evaluate_bullet_matches,
                     train_supervised_pilot, evaluate_frozen_benchmark,
                     evaluate_audited_chess_cases)
+from .puzzle import (build_puzzle_pilot, evaluate_model_on_puzzles,
+                     train_supervised_puzzles, train_puzzle_rl_episodes)
 
 
 def main():
@@ -107,6 +109,42 @@ def main():
     audit.add_argument("--graph")
     audit.add_argument("--checkpoint")
     audit.add_argument("--shuffled", action="store_true")
+
+    # Puzzle pilot commands
+    bpuzz = sub.add_parser("build-puzzles", help="Stream & build reproducible puzzle splits from lichess_db_puzzle.csv.zst")
+    bpuzz.add_argument("--csv", default="data/lichess/lichess_db_puzzle.csv.zst")
+    bpuzz.add_argument("--benchmark", default="data/benchmarks/november_benchmark_120.jsonl")
+    bpuzz.add_argument("--out-dir", default="data/puzzles")
+    bpuzz.add_argument("--train-per-bucket", type=int, default=40)
+    bpuzz.add_argument("--val-per-bucket", type=int, default=10)
+    bpuzz.add_argument("--test-per-bucket", type=int, default=10)
+
+    epuzz = sub.add_parser("eval-puzzles", help="Evaluate model accuracy across puzzle themes")
+    epuzz.add_argument("--graph", required=True)
+    epuzz.add_argument("--checkpoint", required=True)
+    epuzz.add_argument("--puzzles", default="data/puzzles/test_puzzles_frozen.jsonl")
+    epuzz.add_argument("--shuffled", action="store_true")
+
+    tpuzz = sub.add_parser("train-puzzles", help="Supervised training on puzzle pilot")
+    tpuzz.add_argument("--graph", required=True)
+    tpuzz.add_argument("--parent", required=True)
+    tpuzz.add_argument("--train", default="data/puzzles/train_puzzles.jsonl")
+    tpuzz.add_argument("--val", default="data/puzzles/val_puzzles.jsonl")
+    tpuzz.add_argument("--out", required=True)
+    tpuzz.add_argument("--epochs", type=int, default=5)
+    tpuzz.add_argument("--lr", type=float, default=0.002)
+    tpuzz.add_argument("--seed", type=int, default=42)
+    tpuzz.add_argument("--shuffled", action="store_true")
+
+    rlpuzz = sub.add_parser("train-puzzle-rl", help="Online RL puzzle episode training")
+    rlpuzz.add_argument("--graph", required=True)
+    rlpuzz.add_argument("--parent", required=True)
+    rlpuzz.add_argument("--train", default="data/puzzles/train_puzzles.jsonl")
+    rlpuzz.add_argument("--out", required=True)
+    rlpuzz.add_argument("--episodes", type=int, default=50)
+    rlpuzz.add_argument("--lr", type=float, default=0.001)
+    rlpuzz.add_argument("--seed", type=int, default=42)
+    rlpuzz.add_argument("--shuffled", action="store_true")
 
     args = p.parse_args()
     if args.cmd == "fixture":
@@ -218,6 +256,46 @@ def main():
             model = FlyPolicy(args.graph, shuffled=args.shuffled)
             model.load_weights(args.checkpoint)
         res = evaluate_audited_chess_cases(model)
+        print(json.dumps(res, indent=2))
+    elif args.cmd == "build-puzzles":
+        manifest = build_puzzle_pilot(
+            csv_zst_path=args.csv,
+            benchmark_path=args.benchmark,
+            output_dir=args.out_dir,
+            target_train_per_bucket=args.train_per_bucket,
+            target_val_per_bucket=args.val_per_bucket,
+            target_test_per_bucket=args.test_per_bucket,
+        )
+        print(json.dumps(manifest, indent=2))
+    elif args.cmd == "eval-puzzles":
+        model = FlyPolicy(args.graph, shuffled=args.shuffled)
+        model.load_weights(args.checkpoint)
+        res = evaluate_model_on_puzzles(model, args.puzzles)
+        print(json.dumps(res, indent=2))
+    elif args.cmd == "train-puzzles":
+        res = train_supervised_puzzles(
+            graph=args.graph,
+            parent_checkpoint=args.parent,
+            train_file=args.train,
+            val_file=args.val,
+            output_path=args.out,
+            epochs=args.epochs,
+            lr=args.lr,
+            seed=args.seed,
+            shuffled=args.shuffled,
+        )
+        print(json.dumps(res, indent=2))
+    elif args.cmd == "train-puzzle-rl":
+        res = train_puzzle_rl_episodes(
+            graph=args.graph,
+            parent_checkpoint=args.parent,
+            train_file=args.train,
+            output_path=args.out,
+            episodes=args.episodes,
+            lr=args.lr,
+            seed=args.seed,
+            shuffled=args.shuffled,
+        )
         print(json.dumps(res, indent=2))
 
 

@@ -1,0 +1,29 @@
+{
+  "scanned_rows": 10342,
+  "rejected_invalid": 0,
+  "rejected_benchmark_overlap": 0,
+  "total_train": 200,
+  "total_val": 50,
+  "total_frozen_test": 50,
+  "train_by_bucket": {
+    "mateIn1": 40,
+    "mateIn2": 40,
+    "hanging_fork": 40,
+    "defense_equality": 40,
+    "advantage_quiet": 40
+  },
+  "val_by_bucket": {
+    "mateIn1": 10,
+    "mateIn2": 10,
+    "hanging_fork": 10,
+    "defense_equality": 10,
+    "advantage_quiet": 10
+  },
+  "test_by_bucket": {
+    "mateIn1": 10,
+    "mateIn2": 10,
+    "hanging_fork": 10,
+    "defense_equality": 10,
+    "advantage_quiet": 10
+  }
+}

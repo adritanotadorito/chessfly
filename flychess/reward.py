@@ -444,44 +444,58 @@ def compute_game_rewards(match_dict: dict,
                 board.push(opp_move)
             i += 1
 
-    # Bounded total engine penalty diagnostics: maximum 0.10 total across the game
-    total_regret = float(np.mean(engine_regrets)) if engine_regrets else 0.0
-    engine_penalty = min(0.10, total_regret / 1500.0)
-
-    # --- Q3 FIX: cap per-game total move penalty so terminal dominance is preserved ---
-    # Without a cap a 20-blunder game accumulates up to 20 × -0.50 = -10.0 in move
-    # penalties, which completely drowns the ±1.0 terminal signal (a won game becomes
-    # strongly negative, a lost game less negative than a won one).  Cap the *sum* of
-    # move_penalty contributions to ±|terminal_reward| so the terminal signal always
-    # dominates when |terminal_reward| > 0.
+    # --- Audited Stockfish Regret Penalty Cap (0.10 per complete game) ---
+    # Individual move penalties are tiered up to -0.50 per move. Without a game-level cap,
+    # multiple blunders in a 20-move game accumulate up to -10.0, completely overturning
+    # a +1.0 terminal win.
+    # Capping at 1.0 is also flawed because +1.0 - 1.0 = 0.0, making a win equal to a draw.
+    # We strictly cap the total applied regret penalty passed into training at 0.10 per game.
+    # Proportional per-move attribution is preserved via scaling:
+    #   scale = 0.10 / abs(raw_penalty_sum)
+    # This guarantees terminal outcome dominance:
+    #   Win  (+1.0 terminal): total training reward >= +0.75 (strictly beats draw)
+    #   Draw ( 0.0 terminal): total training reward in [-0.25, +0.15]
+    #   Loss (-1.0 terminal): total training reward <= -0.75 (strictly below draw)
+    MAX_REGRET_BUDGET = 0.10
     raw_penalty_sum = sum(t["move_penalty"] for t in fly_transitions)
-    max_penalty_magnitude = max(abs(terminal_reward), 1.0)
-    if abs(raw_penalty_sum) > max_penalty_magnitude and raw_penalty_sum != 0.0:
-        scale = max_penalty_magnitude / abs(raw_penalty_sum)
+    raw_regret_magnitude = abs(raw_penalty_sum)
+
+    if raw_regret_magnitude > MAX_REGRET_BUDGET and raw_regret_magnitude > 0.0:
+        scale = MAX_REGRET_BUDGET / raw_regret_magnitude
         for t in fly_transitions:
-            t["move_penalty"] = t["move_penalty"] * scale
-            t["step_reward"] = t["shaped_reward"] + t["move_penalty"]
+            t["raw_move_penalty"] = t["move_penalty"]
+            t["move_penalty"] = round(t["move_penalty"] * scale, 6)
+            t["step_reward"] = round(t["shaped_reward"] + t["move_penalty"], 6)
+    else:
+        for t in fly_transitions:
+            t["raw_move_penalty"] = t["move_penalty"]
 
     # Distribute rewards and add terminal reward to the final transition
     for t in fly_transitions:
         t["training_reward"] = t["step_reward"]
 
     if fly_transitions:
-        fly_transitions[-1]["training_reward"] += terminal_reward
+        fly_transitions[-1]["training_reward"] = round(fly_transitions[-1]["training_reward"] + terminal_reward, 6)
 
     total_training_reward = sum(t["training_reward"] for t in fly_transitions)
+    applied_engine_penalty = round(abs(sum(t["move_penalty"] for t in fly_transitions)), 4)
+    total_shaping_reward = round(sum(t["shaped_reward"] for t in fly_transitions), 4)
 
-    # 3. Chess diagnostics
+    # 3. Chess diagnostics: clearly distinguish raw move loss, applied penalties, position shaping, and terminal outcome
+    total_regret = float(np.mean(engine_regrets)) if engine_regrets else 0.0
     diagnostics = {
         "final_result": terminal_result,
         "termination_reason": match_dict.get("termination_reason"),
         "terminal_reward": terminal_reward,
+        "total_shaping_reward": total_shaping_reward,
+        "raw_engine_penalty": round(raw_regret_magnitude, 4),
+        "applied_engine_penalty": applied_engine_penalty,
+        "engine_penalty": applied_engine_penalty,  # backward compatible alias
         "total_training_reward": round(total_training_reward, 4),
         "mean_centipawn_loss": round(total_regret, 1) if engine_regrets else 0.0,
         "blunder_count": sum(1 for cp in engine_regrets if cp > 300),
         "acceptable_count": sum(1 for cp in engine_regrets if cp <= 50),
         "fly_plies": len(fly_transitions),
-        "engine_penalty": round(engine_penalty, 4),
         "white_clock": match_dict.get("white_clock"),
         "black_clock": match_dict.get("black_clock"),
     }

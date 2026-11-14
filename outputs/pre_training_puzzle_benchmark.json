@@ -1,0 +1,374 @@
+{
+  "fly_sft_2k": {
+    "checkpoint": "outputs/fly-supervised-2k.npz",
+    "shuffled": false,
+    "val_accuracy": 0.14,
+    "val_loss": 3.3742,
+    "val_by_theme": {
+      "mateIn1": {
+        "correct": 0,
+        "total": 10,
+        "accuracy": 0.0
+      },
+      "mateIn2": {
+        "correct": 2,
+        "total": 10,
+        "accuracy": 0.2
+      },
+      "hanging_fork": {
+        "correct": 0,
+        "total": 10,
+        "accuracy": 0.0
+      },
+      "defense_equality": {
+        "correct": 4,
+        "total": 10,
+        "accuracy": 0.4
+      },
+      "advantage_quiet": {
+        "correct": 1,
+        "total": 10,
+        "accuracy": 0.1
+      }
+    },
+    "test_accuracy": 0.08,
+    "test_loss": 3.003,
+    "test_by_theme": {
+      "mateIn1": {
+        "correct": 0,
+        "total": 10,
+        "accuracy": 0.0
+      },
+      "mateIn2": {
+        "correct": 1,
+        "total": 10,
+        "accuracy": 0.1
+      },
+      "hanging_fork": {
+        "correct": 0,
+        "total": 10,
+        "accuracy": 0.0
+      },
+      "defense_equality": {
+        "correct": 1,
+        "total": 10,
+        "accuracy": 0.1
+      },
+      "advantage_quiet": {
+        "correct": 2,
+        "total": 10,
+        "accuracy": 0.2
+      }
+    }
+  },
+  "shuffled_sft_2k": {
+    "checkpoint": "outputs/shuffled-supervised-2k.npz",
+    "shuffled": true,
+    "val_accuracy": 0.06,
+    "val_loss": 3.2616,
+    "val_by_theme": {
+      "mateIn1": {
+        "correct": 0,
+        "total": 10,
+        "accuracy": 0.0
+      },
+      "mateIn2": {
+        "correct": 0,
+        "total": 10,
+        "accuracy": 0.0
+      },
+      "hanging_fork": {
+        "correct": 0,
+        "total": 10,
+        "accuracy": 0.0
+      },
+      "defense_equality": {
+        "correct": 3,
+        "total": 10,
+        "accuracy": 0.3
+      },
+      "advantage_quiet": {
+        "correct": 0,
+        "total": 10,
+        "accuracy": 0.0
+      }
+    },
+    "test_accuracy": 0.12,
+    "test_loss": 3.0821,
+    "test_by_theme": {
+      "mateIn1": {
+        "correct": 0,
+        "total": 10,
+        "accuracy": 0.0
+      },
+      "mateIn2": {
+        "correct": 0,
+        "total": 10,
+        "accuracy": 0.0
+      },
+      "hanging_fork": {
+        "correct": 0,
+        "total": 10,
+        "accuracy": 0.0
+      },
+      "defense_equality": {
+        "correct": 5,
+        "total": 10,
+        "accuracy": 0.5
+      },
+      "advantage_quiet": {
+        "correct": 1,
+        "total": 10,
+        "accuracy": 0.1
+      }
+    }
+  },
+  "fly_200": {
+    "checkpoint": "outputs/fly-200.npz",
+    "shuffled": false,
+    "val_accuracy": 0.12,
+    "val_loss": 3.9023,
+    "val_by_theme": {
+      "mateIn1": {
+        "correct": 0,
+        "total": 10,
+        "accuracy": 0.0
+      },
+      "mateIn2": {
+        "correct": 0,
+        "total": 10,
+        "accuracy": 0.0
+      },
+      "hanging_fork": {
+        "correct": 0,
+        "total": 10,
+        "accuracy": 0.0
+      },
+      "defense_equality": {
+        "correct": 5,
+        "total": 10,
+        "accuracy": 0.5
+      },
+      "advantage_quiet": {
+        "correct": 1,
+        "total": 10,
+        "accuracy": 0.1
+      }
+    },
+    "test_accuracy": 0.14,
+    "test_loss": 3.4917,
+    "test_by_theme": {
+      "mateIn1": {
+        "correct": 2,
+        "total": 10,
+        "accuracy": 0.2
+      },
+      "mateIn2": {
+        "correct": 1,
+        "total": 10,
+        "accuracy": 0.1
+      },
+      "hanging_fork": {
+        "correct": 0,
+        "total": 10,
+        "accuracy": 0.0
+      },
+      "defense_equality": {
+        "correct": 1,
+        "total": 10,
+        "accuracy": 0.1
+      },
+      "advantage_quiet": {
+        "correct": 3,
+        "total": 10,
+        "accuracy": 0.3
+      }
+    }
+  },
+  "shuffled_200": {
+    "checkpoint": "outputs/shuffled-200.npz",
+    "shuffled": true,
+    "val_accuracy": 0.08,
+    "val_loss": 3.2722,
+    "val_by_theme": {
+      "mateIn1": {
+        "correct": 0,
+        "total": 10,
+        "accuracy": 0.0
+      },
+      "mateIn2": {
+        "correct": 0,
+        "total": 10,
+        "accuracy": 0.0
+      },
+      "hanging_fork": {
+        "correct": 0,
+        "total": 10,
+        "accuracy": 0.0
+      },
+      "defense_equality": {
+        "correct": 3,
+        "total": 10,
+        "accuracy": 0.3
+      },
+      "advantage_quiet": {
+        "correct": 1,
+        "total": 10,
+        "accuracy": 0.1
+      }
+    },
+    "test_accuracy": 0.14,
+    "test_loss": 2.9909,
+    "test_by_theme": {
+      "mateIn1": {
+        "correct": 1,
+        "total": 10,
+        "accuracy": 0.1
+      },
+      "mateIn2": {
+        "correct": 0,
+        "total": 10,
+        "accuracy": 0.0
+      },
+      "hanging_fork": {
+        "correct": 0,
+        "total": 10,
+        "accuracy": 0.0
+      },
+      "defense_equality": {
+        "correct": 3,
+        "total": 10,
+        "accuracy": 0.3
+      },
+      "advantage_quiet": {
+        "correct": 3,
+        "total": 10,
+        "accuracy": 0.3
+      }
+    }
+  },
+  "fly_rl_pilot": {
+    "checkpoint": "outputs/fly-rl-pilot.npz",
+    "shuffled": false,
+    "val_accuracy": 0.08,
+    "val_loss": 3.4594,
+    "val_by_theme": {
+      "mateIn1": {
+        "correct": 0,
+        "total": 10,
+        "accuracy": 0.0
+      },
+      "mateIn2": {
+        "correct": 2,
+        "total": 10,
+        "accuracy": 0.2
+      },
+      "hanging_fork": {
+        "correct": 0,
+        "total": 10,
+        "accuracy": 0.0
+      },
+      "defense_equality": {
+        "correct": 2,
+        "total": 10,
+        "accuracy": 0.2
+      },
+      "advantage_quiet": {
+        "correct": 0,
+        "total": 10,
+        "accuracy": 0.0
+      }
+    },
+    "test_accuracy": 0.1,
+    "test_loss": 2.9515,
+    "test_by_theme": {
+      "mateIn1": {
+        "correct": 0,
+        "total": 10,
+        "accuracy": 0.0
+      },
+      "mateIn2": {
+        "correct": 1,
+        "total": 10,
+        "accuracy": 0.1
+      },
+      "hanging_fork": {
+        "correct": 0,
+        "total": 10,
+        "accuracy": 0.0
+      },
+      "defense_equality": {
+        "correct": 1,
+        "total": 10,
+        "accuracy": 0.1
+      },
+      "advantage_quiet": {
+        "correct": 3,
+        "total": 10,
+        "accuracy": 0.3
+      }
+    }
+  },
+  "shuffled_rl_pilot": {
+    "checkpoint": "outputs/shuffled-rl-pilot.npz",
+    "shuffled": true,
+    "val_accuracy": 0.08,
+    "val_loss": 3.2333,
+    "val_by_theme": {
+      "mateIn1": {
+        "correct": 0,
+        "total": 10,
+        "accuracy": 0.0
+      },
+      "mateIn2": {
+        "correct": 0,
+        "total": 10,
+        "accuracy": 0.0
+      },
+      "hanging_fork": {
+        "correct": 0,
+        "total": 10,
+        "accuracy": 0.0
+      },
+      "defense_equality": {
+        "correct": 3,
+        "total": 10,
+        "accuracy": 0.3
+      },
+      "advantage_quiet": {
+        "correct": 1,
+        "total": 10,
+        "accuracy": 0.1
+      }
+    },
+    "test_accuracy": 0.1,
+    "test_loss": 3.0415,
+    "test_by_theme": {
+      "mateIn1": {
+        "correct": 0,
+        "total": 10,
+        "accuracy": 0.0
+      },
+      "mateIn2": {
+        "correct": 0,
+        "total": 10,
+        "accuracy": 0.0
+      },
+      "hanging_fork": {
+        "correct": 0,
+        "total": 10,
+        "accuracy": 0.0
+      },
+      "defense_equality": {
+        "correct": 4,
+        "total": 10,
+        "accuracy": 0.4
+      },
+      "advantage_quiet": {
+        "correct": 1,
+        "total": 10,
+        "accuracy": 0.1
+      }
+    }
+  }
+}

@@ -436,9 +436,12 @@ with tab_games:
                     st.markdown("**Transparent Reward Audit**")
                     st.write(f"- **Final Match Outcome**: `{diag.get('terminal_reward', 0.0):+.1f}`")
                     st.write(f"- **Total Training Reward**: `{diag.get('total_training_reward', 0.0):+.4f}`")
+                    st.write(f"- **Total Position Shaping**: `{diag.get('total_shaping_reward', 0.0):+.4f}`")
                     st.write(f"- **Mean Centipawn Loss (ACPL)**: `{diag.get('mean_centipawn_loss', 0.0)} cp`")
                     st.write(f"- **Blunders (>300 cp)**: `{diag.get('blunder_count', 0)}`")
-                    st.write(f"- **Bounded Stockfish Regret Penalty**: `{diag.get('engine_penalty', 0.0):.4f}`")
+                    st.write(f"- **Applied Stockfish Regret Penalty**: `{diag.get('applied_engine_penalty', diag.get('engine_penalty', 0.0)):.4f}` (capped at ≤ 0.10/game)")
+                    if "raw_engine_penalty" in diag:
+                        st.write(f"- **Raw Uncapped Regret**: `{diag.get('raw_engine_penalty', 0.0):.4f}`")
 
 # ==============================================================================
 # TAB 3: REWARD-BASED RL TRAINING
@@ -447,8 +450,8 @@ with tab_rl:
     st.subheader("🧠 Online Reward-Based Reinforcement Learning")
     st.markdown("""
     Unlike supervised warm starts, this trains the policy **directly from complete bullet games**.
-    The model plays against Stockfish, receives the transparent chess reward (material, safe activity, coordination, king safety, passed pawns, and bounded engine regret),
-    and updates **the 396 biological FlyWire edge gains** as well as the dense adapter and move readout via policy gradients (**REINFORCE**).
+    The model plays against Stockfish, receives the transparent chess reward (material, safe activity, coordination, king safety, passed pawns, and bounded engine regret capped at 0.10 per complete game),
+    and updates **the 396 biological FlyWire edge gains** as well as the dense adapter and move readout via Advantage Actor-Critic (**A2C**).
     """)
 
     rl_c1, rl_c2, rl_c3 = st.columns(3)

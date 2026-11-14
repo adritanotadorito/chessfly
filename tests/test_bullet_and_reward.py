@@ -51,9 +51,11 @@ class BulletAndRewardTests(unittest.TestCase):
         # Position returned to starting position
         self.assertAlmostEqual(phi_start, phi_end, places=5)
 
-    def test_case_1_sound_sacrifice(self):
-        # Classic Greek Gift Bishop Sacrifice Bxh7+
-        # White gives up bishop (3.3) for decisive king attack
+    def test_case_1_bishop_sacrifice_king_safety(self):
+        # Greek Gift Bishop Sacrifice Bxh7+ heuristic evaluation
+        # Note: Audited engine analysis at nodes=15000 shows Stockfish does NOT select
+        # Bxh7+ in top-5 moves (prefers Nexd4 +175cp). This test verifies the transparent
+        # feature calculation (king safety and shelter stripping), NOT engine optimality.
         b_before = chess.Board("r1bq1rk1/pp1n1ppp/2n1p3/2bpP3/3p1B2/2PB1N2/PP2NPPP/R2Q1RK1 w - - 0 10")
         f_before = features(b_before, chess.WHITE)
         phi_before = potential(b_before, chess.WHITE)
@@ -71,15 +73,16 @@ class BulletAndRewardTests(unittest.TestCase):
         self.assertGreater(f_after["king_safety"], f_before["king_safety"])
         self.assertEqual(f_after["king_safety"] - f_before["king_safety"], 3.0)
 
-        # In addition, Stockfish confirms this sacrifice is sound (loss_cp == 0)
-        # while a flashy unsound sacrifice has severe regret:
-        unsound_move = chess.Move.from_uci("f4d6") # giving up bishop for nothing
-        # Deep continuation: White plays Ng5+ then Qd3 threatening mate
+        # Continuation: White plays Ng5+ then Qd3 threatening mate
         b_after.push_san("Ng5+")
         b_after.push_san("Kg8")
         b_after.push_san("Qd3")
         f_attack = features(b_after, chess.WHITE)
         self.assertGreater(f_attack["king_safety"], f_before["king_safety"])
+
+    def test_case_1_sound_sacrifice(self):
+        """Backward-compatible alias for test_case_1_bishop_sacrifice_king_safety."""
+        self.test_case_1_bishop_sacrifice_king_safety()
 
     def test_case_2_poisoned_pawn(self):
         # Sicilian / Queen grabs b2 pawn and gets trapped
@@ -261,58 +264,64 @@ class BulletAndRewardTests(unittest.TestCase):
 
 
 
-    # ------------------------------------------------------------------ Q3 --
-    def test_win_dominates_blunder_penalties(self):
-        """Q3 regression: a game won with many blunders must have positive total_training_reward.
-
-        Before the fix, 10 × -0.50 move penalties (-5.0) overwhelmed a +1.0 terminal
-        win, yielding total_training_reward ≈ -4.0.  After the cap the per-game penalty
-        sum is bounded to ≤ |terminal_reward| = 1.0, so a win stays positive.
+    # ------------------------------------------------------------------ Q3 & Reward Audit --
+    def test_audited_010_regret_cap_and_win_preference(self):
+        """Audited regression: Stockfish regret penalties are capped at 0.10 per complete game.
+        
+        Even with multiple severe tactical blunders, a win must remain strictly preferable
+        to a draw, and a draw strictly preferable to a loss.
         """
-        # Build a 10-ply game that fly (white) wins: Scholar's Mate in 4 moves is too
-        # short, so we just use the fixed-penalty path without calling the engine.
-        # Inject large artificial move_penalty values by monkey-patching the returned
-        # transitions so we can verify the capping logic end-to-end.
-        import copy
         from flychess.reward import compute_game_rewards
+        import numpy as np
 
-        # Minimal 2-move match (fly e4, stockfish e5) → fly wins
-        match_dict = {
-            "result": "1-0",
-            "winner": "fly",
-            "termination_reason": "Checkmate",
-            "fly_color": "white",
-            "moves": [
-                {"ply": 1, "player": "fly", "uci": "e2e4", "san": "e4",
-                 "white_clock": 59.0, "black_clock": 60.0},
-                {"ply": 2, "player": "stockfish", "uci": "e7e5", "san": "e5",
-                 "white_clock": 59.0, "black_clock": 58.0},
-            ]
-        }
-        result = compute_game_rewards(match_dict)
-        # With no engine the move_penalty is 0 — just verify the win is positive.
-        self.assertGreater(result["training_reward"], 0.0)
-        self.assertEqual(result["terminal_reward"], 1.0)
+        # Construct a synthetic multi-move match
+        moves = [
+            {"ply": 1, "player": "fly", "uci": "e2e4", "san": "e4", "white_clock": 58.0, "black_clock": 60.0},
+            {"ply": 2, "player": "stockfish", "uci": "e7e5", "san": "e5", "white_clock": 58.0, "black_clock": 59.0},
+            {"ply": 3, "player": "fly", "uci": "g1f3", "san": "Nf3", "white_clock": 56.0, "black_clock": 59.0},
+            {"ply": 4, "player": "stockfish", "uci": "b8c6", "san": "Nc6", "white_clock": 56.0, "black_clock": 57.0},
+            {"ply": 5, "player": "fly", "uci": "f1c4", "san": "Bc4", "white_clock": 54.0, "black_clock": 57.0},
+            {"ply": 6, "player": "stockfish", "uci": "f8c5", "san": "Bc5", "white_clock": 54.0, "black_clock": 55.0},
+        ]
 
-        # Now directly verify the cap arithmetic: simulate what the code does
-        # when every fly move is a 500 cp blunder (move_penalty ≈ -0.50 each).
-        # 10 moves × -0.50 = -5.0 raw; cap to max(-1.0, 1.0) = 1.0 magnitude.
-        # After cap each penalty is -0.10, sum = -1.0; terminal = +1.0 → net ≥ 0.
-        raw_sum = 10 * -0.50   # -5.0
-        terminal = 1.0
-        cap = max(abs(terminal), 1.0)
-        if abs(raw_sum) > cap:
-            scale = cap / abs(raw_sum)
-            capped_sum = raw_sum * scale
-        else:
-            capped_sum = raw_sum
-        # Last transition absorbs terminal_reward (+1.0)
-        net = capped_sum + terminal
-        self.assertGreaterEqual(net, 0.0,
-            f"Capped sum {capped_sum:.4f} + terminal {terminal} should be >= 0, got {net:.4f}")
+        # 1. Test Cap Logic & Proportional Attribution directly on transitions
+        # Suppose fly had 3 moves with raw penalties: -0.50 (blunder), -0.30 (mistake), -0.20 (mistake)
+        # Total raw penalty sum = -1.00 (magnitude 1.00 > 0.10 cap)
+        raw_penalties = [-0.50, -0.30, -0.20]
+        raw_mag = sum(abs(p) for p in raw_penalties)
+        cap = 0.10
+        scale = cap / raw_mag
+        scaled_penalties = [p * scale for p in raw_penalties]
+
+        # Total applied penalty equals exactly 0.10
+        self.assertAlmostEqual(sum(abs(p) for p in scaled_penalties), 0.10, places=5)
+        # Proportional attribution is preserved:
+        self.assertAlmostEqual(scaled_penalties[0] / scaled_penalties[2], -0.50 / -0.20, places=5)
+        self.assertAlmostEqual(scaled_penalties[1] / scaled_penalties[2], -0.30 / -0.20, places=5)
+
+        # 2. Evaluate compute_game_rewards across Win, Draw, and Loss outcomes
+        win_match = {"result": "1-0", "winner": "fly", "termination_reason": "Checkmate", "fly_color": "white", "moves": moves}
+        draw_match = {"result": "1/2-1/2", "winner": None, "termination_reason": "Draw by agreement", "fly_color": "white", "moves": moves}
+        loss_match = {"result": "0-1", "winner": "stockfish", "termination_reason": "Checkmate", "fly_color": "white", "moves": moves}
+
+        res_win = compute_game_rewards(win_match)
+        res_draw = compute_game_rewards(draw_match)
+        res_loss = compute_game_rewards(loss_match)
+
+        # Strict ordering of outcomes: Win > Draw > Loss
+        self.assertGreater(res_win["training_reward"], res_draw["training_reward"])
+        self.assertGreater(res_draw["training_reward"], res_loss["training_reward"])
+
+        # Applied engine penalty is within the 0.10 cap
+        self.assertLessEqual(res_win["diagnostics"]["applied_engine_penalty"], 0.10)
+        self.assertLessEqual(res_draw["diagnostics"]["applied_engine_penalty"], 0.10)
+        self.assertLessEqual(res_loss["diagnostics"]["applied_engine_penalty"], 0.10)
+
+        # Logged applied penalty equals what influenced training
+        self.assertEqual(res_win["diagnostics"]["applied_engine_penalty"], res_win["diagnostics"]["engine_penalty"])
 
     def test_loss_stays_negative_with_cap(self):
-        """Q3: a game that fly *lost* must still have negative total_training_reward."""
+        """A game that fly lost must produce a negative training reward."""
         from flychess.reward import compute_game_rewards
 
         match_dict = {
@@ -321,42 +330,35 @@ class BulletAndRewardTests(unittest.TestCase):
             "termination_reason": "Checkmate",
             "fly_color": "white",
             "moves": [
-                {"ply": 1, "player": "fly", "uci": "e2e4", "san": "e4",
-                 "white_clock": 59.0, "black_clock": 60.0},
-                {"ply": 2, "player": "stockfish", "uci": "e7e5", "san": "e5",
-                 "white_clock": 59.0, "black_clock": 58.0},
+                {"ply": 1, "player": "fly", "uci": "e2e4", "san": "e4", "white_clock": 59.0, "black_clock": 60.0},
+                {"ply": 2, "player": "stockfish", "uci": "e7e5", "san": "e5", "white_clock": 59.0, "black_clock": 58.0},
             ]
         }
         result = compute_game_rewards(match_dict)
         self.assertLess(result["training_reward"], 0.0)
         self.assertEqual(result["terminal_reward"], -1.0)
 
-    # ------------------------------------------------------------------ Q4 --
+    # ------------------------------------------------------------------ Q4: Discounted Returns & No Reward Farming --
     def test_repeated_position_discounted_returns(self):
-        """Q4: repeated knight shuffle produces near-zero or negative early returns
-        even when the game eventually ends with a win.
-
-        The discounted return G_t = Σ γ^k r_{t+k}.  If a move has step_reward ≈ 0
-        (no progress, no blunder), then the first four transitions in a 4-move shuffle
-        get a heavily discounted terminal signal, while each individual step contributes
-        nothing.  This verifies that the loop does NOT award positive artificial returns
-        to the shuffle moves.
+        """Repeated piece shuffling produces net-zero shaping and delayed win discounting.
+        
+        Verifies that cycling moves back and forth does NOT enable reward farming:
+        intermediate shuffle moves receive 0 shaping, and the delayed terminal reward
+        decays as gamma^k rather than accumulating artificial reward.
         """
-        # Build synthetic transition lists as compute_game_rewards would
-        import numpy as np
         gamma = 0.99
 
-        # 4 shuffle transitions: each has shaped_reward≈0, move_penalty=0
-        # Then 1 terminal transition where terminal_reward=+1.0
+        # 4 shuffle transitions: shaped_reward=0, move_penalty=0
+        # Followed by 1 winning move with terminal_reward = 1.0
         transitions = [
             {"training_reward": 0.0},   # Nf3
             {"training_reward": 0.0},   # Ng1 (back)
             {"training_reward": 0.0},   # Nf3
             {"training_reward": 0.0},   # Ng1 (back)
-            {"training_reward": 1.0},   # winning move (terminal)
+            {"training_reward": 1.0},   # checkmate move (terminal)
         ]
 
-        # Compute returns exactly as train_rl_bullet does
+        # Compute discounted returns G_t = sum_k gamma^k r_{t+k}
         running = 0.0
         returns = []
         for t in reversed(transitions):
@@ -364,25 +366,25 @@ class BulletAndRewardTests(unittest.TestCase):
             returns.append(running)
         returns.reverse()
 
-        # Terminal step gets full return 1.0
+        # Terminal move gets full 1.0 return
         self.assertAlmostEqual(returns[-1], 1.0, places=4)
 
-        # First shuffle step gets γ^4 ≈ 0.9606 (discounted terminal only)
-        expected_first = gamma**4 * 1.0
-        self.assertAlmostEqual(returns[0], expected_first, places=4,
-            msg=f"First shuffle return should be γ^4={expected_first:.4f}, got {returns[0]:.4f}")
+        # Earlier shuffle moves get discounted return gamma^4 * 1.0 ≈ 0.9606
+        expected_first = (gamma ** 4) * 1.0
+        self.assertAlmostEqual(returns[0], expected_first, places=4)
 
-        # Crucially: ALL returns are non-negative (terminal dominates) but each
-        # shuffle step gets strictly less than the winning step.
+        # Every shuffle move gets strictly less return than the decisive terminal move
         for i in range(len(returns) - 1):
-            self.assertLess(returns[i], returns[-1],
-                msg=f"Shuffle step {i} return {returns[i]:.4f} should be < winning step {returns[-1]:.4f}")
+            self.assertLess(returns[i], returns[-1])
 
-        # Advantage: if baseline is 0 the agent has weak incentive to shuffle
-        # (small positive return for shuffle, larger for decisive move).
-        # This is NOT a perfect disincentive but is the expected behavior with γ=0.99.
-        # Verify shuffle return is at most ~96% of winning step return.
-        self.assertLess(returns[0] / returns[-1], 0.97)
+        # Without a terminal win (e.g. repeated shuffle in a drawn game), return is strictly 0.0
+        zero_transitions = [{"training_reward": 0.0} for _ in range(5)]
+        zero_returns = []
+        run = 0.0
+        for t in reversed(zero_transitions):
+            run = t["training_reward"] + gamma * run
+            zero_returns.append(run)
+        self.assertTrue(all(r == 0.0 for r in zero_returns))
 
 
 if __name__ == "__main__":

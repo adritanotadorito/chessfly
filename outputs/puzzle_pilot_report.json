@@ -1,0 +1,296 @@
+{
+  "Fly SFT-2k Parent": {
+    "checkpoint": "outputs/fly-supervised-2k.npz",
+    "shuffled": false,
+    "puzzle_test_acc": 0.08,
+    "puzzle_test_loss": 3.003,
+    "puzzle_val_acc": 0.14,
+    "puzzle_val_loss": 3.3742,
+    "puzzle_test_by_theme": {
+      "mateIn1": {
+        "correct": 0,
+        "total": 10,
+        "accuracy": 0.0
+      },
+      "mateIn2": {
+        "correct": 1,
+        "total": 10,
+        "accuracy": 0.1
+      },
+      "hanging_fork": {
+        "correct": 0,
+        "total": 10,
+        "accuracy": 0.0
+      },
+      "defense_equality": {
+        "correct": 1,
+        "total": 10,
+        "accuracy": 0.1
+      },
+      "advantage_quiet": {
+        "correct": 2,
+        "total": 10,
+        "accuracy": 0.2
+      }
+    },
+    "bench_legal_rate": 1.0,
+    "bench_mean_acpl": 1025.7,
+    "bench_median_cpl": 250.0,
+    "bench_blunder_rate": 0.4583,
+    "bench_acceptable_rate": 0.2417,
+    "bench_top1_acc": 0.1083,
+    "bench_tactical_top1": 0.25
+  },
+  "Shuffled SFT-2k Parent": {
+    "checkpoint": "outputs/shuffled-supervised-2k.npz",
+    "shuffled": true,
+    "puzzle_test_acc": 0.12,
+    "puzzle_test_loss": 3.0821,
+    "puzzle_val_acc": 0.06,
+    "puzzle_val_loss": 3.2616,
+    "puzzle_test_by_theme": {
+      "mateIn1": {
+        "correct": 0,
+        "total": 10,
+        "accuracy": 0.0
+      },
+      "mateIn2": {
+        "correct": 0,
+        "total": 10,
+        "accuracy": 0.0
+      },
+      "hanging_fork": {
+        "correct": 0,
+        "total": 10,
+        "accuracy": 0.0
+      },
+      "defense_equality": {
+        "correct": 5,
+        "total": 10,
+        "accuracy": 0.5
+      },
+      "advantage_quiet": {
+        "correct": 1,
+        "total": 10,
+        "accuracy": 0.1
+      }
+    },
+    "bench_legal_rate": 1.0,
+    "bench_mean_acpl": 905.7,
+    "bench_median_cpl": 232.0,
+    "bench_blunder_rate": 0.4167,
+    "bench_acceptable_rate": 0.225,
+    "bench_top1_acc": 0.1,
+    "bench_tactical_top1": 0.35
+  },
+  "Fly-200 Baseline": {
+    "checkpoint": "outputs/fly-200.npz",
+    "shuffled": false,
+    "puzzle_test_acc": 0.14,
+    "puzzle_test_loss": 3.4917,
+    "puzzle_val_acc": 0.12,
+    "puzzle_val_loss": 3.9023,
+    "puzzle_test_by_theme": {
+      "mateIn1": {
+        "correct": 2,
+        "total": 10,
+        "accuracy": 0.2
+      },
+      "mateIn2": {
+        "correct": 1,
+        "total": 10,
+        "accuracy": 0.1
+      },
+      "hanging_fork": {
+        "correct": 0,
+        "total": 10,
+        "accuracy": 0.0
+      },
+      "defense_equality": {
+        "correct": 1,
+        "total": 10,
+        "accuracy": 0.1
+      },
+      "advantage_quiet": {
+        "correct": 3,
+        "total": 10,
+        "accuracy": 0.3
+      }
+    },
+    "bench_legal_rate": 1.0,
+    "bench_mean_acpl": 783.9,
+    "bench_median_cpl": 221.0,
+    "bench_blunder_rate": 0.4083,
+    "bench_acceptable_rate": 0.2417,
+    "bench_top1_acc": 0.1083,
+    "bench_tactical_top1": 0.25
+  },
+  "Fly Puzzle SFT (Best Ep 3)": {
+    "checkpoint": "outputs/fly-puzzle-sft.npz",
+    "shuffled": false,
+    "puzzle_test_acc": 0.04,
+    "puzzle_test_loss": 3.8948,
+    "puzzle_val_acc": 0.18,
+    "puzzle_val_loss": 3.1249,
+    "puzzle_test_by_theme": {
+      "mateIn1": {
+        "correct": 0,
+        "total": 10,
+        "accuracy": 0.0
+      },
+      "mateIn2": {
+        "correct": 0,
+        "total": 10,
+        "accuracy": 0.0
+      },
+      "hanging_fork": {
+        "correct": 0,
+        "total": 10,
+        "accuracy": 0.0
+      },
+      "defense_equality": {
+        "correct": 1,
+        "total": 10,
+        "accuracy": 0.1
+      },
+      "advantage_quiet": {
+        "correct": 1,
+        "total": 10,
+        "accuracy": 0.1
+      }
+    },
+    "bench_legal_rate": 1.0,
+    "bench_mean_acpl": 965.8,
+    "bench_median_cpl": 276.5,
+    "bench_blunder_rate": 0.475,
+    "bench_acceptable_rate": 0.175,
+    "bench_top1_acc": 0.0667,
+    "bench_tactical_top1": 0.25
+  },
+  "Shuffled Puzzle SFT (Best Ep 5)": {
+    "checkpoint": "outputs/shuffled-puzzle-sft.npz",
+    "shuffled": true,
+    "puzzle_test_acc": 0.02,
+    "puzzle_test_loss": 3.5702,
+    "puzzle_val_acc": 0.18,
+    "puzzle_val_loss": 2.7806,
+    "puzzle_test_by_theme": {
+      "mateIn1": {
+        "correct": 0,
+        "total": 10,
+        "accuracy": 0.0
+      },
+      "mateIn2": {
+        "correct": 0,
+        "total": 10,
+        "accuracy": 0.0
+      },
+      "hanging_fork": {
+        "correct": 0,
+        "total": 10,
+        "accuracy": 0.0
+      },
+      "defense_equality": {
+        "correct": 1,
+        "total": 10,
+        "accuracy": 0.1
+      },
+      "advantage_quiet": {
+        "correct": 0,
+        "total": 10,
+        "accuracy": 0.0
+      }
+    },
+    "bench_legal_rate": 1.0,
+    "bench_mean_acpl": 927.1,
+    "bench_median_cpl": 288.5,
+    "bench_blunder_rate": 0.4917,
+    "bench_acceptable_rate": 0.2167,
+    "bench_top1_acc": 0.1083,
+    "bench_tactical_top1": 0.25
+  },
+  "Fly Puzzle RL (50 eps)": {
+    "checkpoint": "outputs/fly-puzzle-rl.npz",
+    "shuffled": false,
+    "puzzle_test_acc": 0.1,
+    "puzzle_test_loss": 3.012,
+    "puzzle_val_acc": 0.08,
+    "puzzle_val_loss": 3.4188,
+    "puzzle_test_by_theme": {
+      "mateIn1": {
+        "correct": 0,
+        "total": 10,
+        "accuracy": 0.0
+      },
+      "mateIn2": {
+        "correct": 1,
+        "total": 10,
+        "accuracy": 0.1
+      },
+      "hanging_fork": {
+        "correct": 1,
+        "total": 10,
+        "accuracy": 0.1
+      },
+      "defense_equality": {
+        "correct": 1,
+        "total": 10,
+        "accuracy": 0.1
+      },
+      "advantage_quiet": {
+        "correct": 2,
+        "total": 10,
+        "accuracy": 0.2
+      }
+    },
+    "bench_legal_rate": 1.0,
+    "bench_mean_acpl": 1015.3,
+    "bench_median_cpl": 223.5,
+    "bench_blunder_rate": 0.4417,
+    "bench_acceptable_rate": 0.2667,
+    "bench_top1_acc": 0.1,
+    "bench_tactical_top1": 0.25
+  },
+  "Shuffled Puzzle RL (50 eps)": {
+    "checkpoint": "outputs/shuffled-puzzle-rl.npz",
+    "shuffled": true,
+    "puzzle_test_acc": 0.12,
+    "puzzle_test_loss": 3.0973,
+    "puzzle_val_acc": 0.06,
+    "puzzle_val_loss": 3.2306,
+    "puzzle_test_by_theme": {
+      "mateIn1": {
+        "correct": 0,
+        "total": 10,
+        "accuracy": 0.0
+      },
+      "mateIn2": {
+        "correct": 1,
+        "total": 10,
+        "accuracy": 0.1
+      },
+      "hanging_fork": {
+        "correct": 0,
+        "total": 10,
+        "accuracy": 0.0
+      },
+      "defense_equality": {
+        "correct": 4,
+        "total": 10,
+        "accuracy": 0.4
+      },
+      "advantage_quiet": {
+        "correct": 1,
+        "total": 10,
+        "accuracy": 0.1
+      }
+    },
+    "bench_legal_rate": 1.0,
+    "bench_mean_acpl": 1059.7,
+    "bench_median_cpl": 251.5,
+    "bench_blunder_rate": 0.4917,
+    "bench_acceptable_rate": 0.2083,
+    "bench_top1_acc": 0.0583,
+    "bench_tactical_top1": 0.25
+  }
+}
