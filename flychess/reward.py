@@ -448,6 +448,20 @@ def compute_game_rewards(match_dict: dict,
     total_regret = float(np.mean(engine_regrets)) if engine_regrets else 0.0
     engine_penalty = min(0.10, total_regret / 1500.0)
 
+    # --- Q3 FIX: cap per-game total move penalty so terminal dominance is preserved ---
+    # Without a cap a 20-blunder game accumulates up to 20 × -0.50 = -10.0 in move
+    # penalties, which completely drowns the ±1.0 terminal signal (a won game becomes
+    # strongly negative, a lost game less negative than a won one).  Cap the *sum* of
+    # move_penalty contributions to ±|terminal_reward| so the terminal signal always
+    # dominates when |terminal_reward| > 0.
+    raw_penalty_sum = sum(t["move_penalty"] for t in fly_transitions)
+    max_penalty_magnitude = max(abs(terminal_reward), 1.0)
+    if abs(raw_penalty_sum) > max_penalty_magnitude and raw_penalty_sum != 0.0:
+        scale = max_penalty_magnitude / abs(raw_penalty_sum)
+        for t in fly_transitions:
+            t["move_penalty"] = t["move_penalty"] * scale
+            t["step_reward"] = t["shaped_reward"] + t["move_penalty"]
+
     # Distribute rewards and add terminal reward to the final transition
     for t in fly_transitions:
         t["training_reward"] = t["step_reward"]
