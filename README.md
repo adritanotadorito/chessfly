@@ -250,10 +250,13 @@ Full Harbor job logs, including verifier stdout and per-scenario cp scores, are 
 pip install harbor            # needs Docker running
 bash scripts/eval_harbor.sh   # oracle, nop, stop-early-1, stop-early-2
 ```
-Frontier agent (three trials, as judges will run it; needs your own key):
+Frontier agent comparison (OpenCode harness; keys are read from `.env` or the environment and never printed or committed):
 ```bash
-harbor run -p ./harbor_task -a opencode -m <provider/model> -k 3
+bash scripts/eval_frontier.sh list                        # Gemini models your key can call
+bash scripts/eval_frontier.sh google/gemini-2.5-pro 3     # 3 trials, as judges rerun it
+python3 scripts/compare_runs.py                           # -> reports/harbor_comparison.{md,json}
 ```
+`compare_runs.py` aggregates every trial in `harbor_runs/`, including the reference, nop, stop-early, and frontier trials, and reports mean/min/max plus per-scenario score and final cp. The same table appears in the Streamlit app under **🏁 Frontier Benchmark**. Equivalent raw command: `harbor run -p ./harbor_task -a opencode -m <provider/model> -k 3`.
 
 ### Honest limitations
 - **No frontier-agent run has been recorded yet**, so the gap versus the oracle is **unmeasured**. We make no claims about which mistakes frontier models make.

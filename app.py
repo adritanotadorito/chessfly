@@ -126,9 +126,10 @@ with col_h2:
     )
 
 # Primary Navigation Tabs
-tab_play, tab_games, tab_rl, tab_sft, tab_about = st.tabs([
+tab_play, tab_games, tab_bench, tab_rl, tab_sft, tab_about = st.tabs([
     "⚔️ Play & Live Matches",
     "📜 Games & Replay",
+    "🏁 Frontier Benchmark",
     "🧠 Reward-Based RL",
     "📊 SFT / Move Imitation",
     "🔬 Science & Architecture"
@@ -760,3 +761,53 @@ with tab_about:
             st.json(meta_info)
         except Exception:
             pass
+
+
+# ==============================================================================
+# TAB: FRONTIER BENCHMARK (Harbor results, observed trials only)
+# ==============================================================================
+with tab_bench:
+    st.subheader("🏁 ChessFly: Counterplay — reference vs frontier agents")
+    st.caption("Harbor task: 4 chess positions × 2 decisions vs a pinned Stockfish opponent, 3 bounded "
+               "inspections per position, engine-verified reward in [0, 1]. Only real Harbor trials "
+               "from `harbor_runs/` are shown; nothing here is estimated.")
+    comp_path = ROOT / "reports" / "harbor_comparison.json"
+    if not comp_path.is_file():
+        st.info("No comparison report yet. Run `python3 scripts/compare_runs.py` after Harbor trials.")
+    else:
+        comp = json.loads(comp_path.read_text())
+        summary = comp.get("summary", [])
+        frontier = [s for s in summary if not s["agent"].startswith(("reference", "do-nothing", "baseline"))]
+        ref = next((s for s in summary if s["agent"].startswith("reference")), None)
+        mcols = st.columns(3)
+        mcols[0].metric("Reference (oracle)", f"{ref['mean']:.3f}" if ref and ref["mean"] is not None else "—")
+        if frontier:
+            best = max(frontier, key=lambda s: s["mean"] or 0)
+            mcols[1].metric(f"Best frontier: {best['agent']}", f"{best['mean']:.3f}" if best["mean"] is not None else "—",
+                            delta=(f"{best['mean'] - ref['mean']:+.3f} vs reference" if ref and best["mean"] is not None else None))
+            mcols[2].metric("Frontier trials recorded", sum(s["trials"] for s in frontier))
+        else:
+            mcols[1].metric("Frontier agent", "not run yet")
+            mcols[2].metric("Frontier trials recorded", 0)
+        st.markdown("#### Mean reward by agent")
+        st.dataframe([{"Agent": s["agent"], "Trials": s["trials"], "Mean": s["mean"], "Min": s["min"],
+                       "Max": s["max"], "Rewards": ", ".join(f"{r:.4f}" for r in s["rewards"])} for s in summary],
+                     hide_index=True)
+        if summary:
+            st.bar_chart({s["agent"]: s["mean"] or 0 for s in summary}, horizontal=True)
+        st.markdown("#### Per-scenario detail (score / final centipawns from the agent's side)")
+        names = {"scenario_1_poisoned_material": "S1 Queen raid", "scenario_2_acute_threat_defense": "S2 f7 threat",
+                 "scenario_3_tactical_counterplay": "S3 Knight fork", "scenario_4_sound_vs_unsound": "S4 Attack/consolidate"}
+        rows = []
+        for tr in comp.get("trials", []):
+            row = {"Agent": tr["agent"], "Trial": tr["trial"], "Reward": tr["reward"]}
+            for sid, nm in names.items():
+                d = tr["scenarios"].get(sid, {})
+                row[nm] = "—" if d.get("score") is None else f"{d['score']} / {d.get('cp')}"
+            rows.append(row)
+        st.dataframe(rows, hide_index=True)
+    st.markdown("#### Reproduce")
+    st.code("pip install harbor   # Docker must be running\n"
+            "bash scripts/eval_harbor.sh                                  # reference, nop, stop-early\n"
+            "bash scripts/eval_frontier.sh google/gemini-2.5-pro 3        # frontier agent via OpenCode, 3 trials\n"
+            "python3 scripts/compare_runs.py                              # refresh this table", language="bash")

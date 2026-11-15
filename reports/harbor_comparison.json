@@ -1,0 +1,166 @@
+{
+  "summary": [
+    {
+      "agent": "reference (oracle)",
+      "trials": 1,
+      "scored": 1,
+      "mean": 1.0,
+      "min": 1.0,
+      "max": 1.0,
+      "rewards": [
+        1.0
+      ]
+    },
+    {
+      "agent": "baseline:stop-early-1",
+      "trials": 1,
+      "scored": 1,
+      "mean": 0.0625,
+      "min": 0.0625,
+      "max": 0.0625,
+      "rewards": [
+        0.0625
+      ]
+    },
+    {
+      "agent": "baseline:stop-early-2",
+      "trials": 1,
+      "scored": 1,
+      "mean": 0.25,
+      "min": 0.25,
+      "max": 0.25,
+      "rewards": [
+        0.25
+      ]
+    },
+    {
+      "agent": "do-nothing (nop)",
+      "trials": 1,
+      "scored": 1,
+      "mean": 0.0,
+      "min": 0.0,
+      "max": 0.0,
+      "rewards": [
+        0.0
+      ]
+    }
+  ],
+  "trials": [
+    {
+      "job": "nop-1794724068",
+      "trial": "harbor_task__73Jq9PT",
+      "agent": "do-nothing (nop)",
+      "reward": 0.0,
+      "exception": null,
+      "scenarios": {
+        "scenario_1_poisoned_material": {
+          "score": 0.0,
+          "cp": null,
+          "reason": "incomplete_or_stopped_early"
+        },
+        "scenario_2_acute_threat_defense": {
+          "score": 0.0,
+          "cp": null,
+          "reason": "incomplete_or_stopped_early"
+        },
+        "scenario_3_tactical_counterplay": {
+          "score": 0.0,
+          "cp": null,
+          "reason": "incomplete_or_stopped_early"
+        },
+        "scenario_4_sound_vs_unsound": {
+          "score": 0.0,
+          "cp": null,
+          "reason": "incomplete_or_stopped_early"
+        }
+      }
+    },
+    {
+      "job": "oracle-1794724043",
+      "trial": "harbor_task__6HPsQeb",
+      "agent": "reference (oracle)",
+      "reward": 1.0,
+      "exception": null,
+      "scenarios": {
+        "scenario_1_poisoned_material": {
+          "score": 0.25,
+          "cp": 664,
+          "reason": "evaluated"
+        },
+        "scenario_2_acute_threat_defense": {
+          "score": 0.25,
+          "cp": 30,
+          "reason": "evaluated"
+        },
+        "scenario_3_tactical_counterplay": {
+          "score": 0.25,
+          "cp": 384,
+          "reason": "evaluated"
+        },
+        "scenario_4_sound_vs_unsound": {
+          "score": 0.25,
+          "cp": 155,
+          "reason": "evaluated"
+        }
+      }
+    },
+    {
+      "job": "stop-early-1-1794724085",
+      "trial": "stop-early-1__tZjryGE",
+      "agent": "baseline:stop-early-1",
+      "reward": 0.0625,
+      "exception": null,
+      "scenarios": {
+        "scenario_1_poisoned_material": {
+          "score": 0.25,
+          "cp": 664,
+          "reason": "evaluated"
+        },
+        "scenario_2_acute_threat_defense": {
+          "score": 0.0,
+          "cp": null,
+          "reason": "incomplete_or_stopped_early"
+        },
+        "scenario_3_tactical_counterplay": {
+          "score": 0.0,
+          "cp": null,
+          "reason": "incomplete_or_stopped_early"
+        },
+        "scenario_4_sound_vs_unsound": {
+          "score": 0.0,
+          "cp": null,
+          "reason": "incomplete_or_stopped_early"
+        }
+      }
+    },
+    {
+      "job": "stop-early-2-1794724105",
+      "trial": "stop-early-2__WcfazsJ",
+      "agent": "baseline:stop-early-2",
+      "reward": 0.25,
+      "exception": null,
+      "scenarios": {
+        "scenario_1_poisoned_material": {
+          "score": 0.25,
+          "cp": 664,
+          "reason": "evaluated"
+        },
+        "scenario_2_acute_threat_defense": {
+          "score": 0.25,
+          "cp": 30,
+          "reason": "evaluated"
+        },
+        "scenario_3_tactical_counterplay": {
+          "score": 0.0,
+          "cp": null,
+          "reason": "incomplete_or_stopped_early"
+        },
+        "scenario_4_sound_vs_unsound": {
+          "score": 0.0,
+          "cp": null,
+          "reason": "incomplete_or_stopped_early"
+        }
+      }
+    }
+  ]
+}
