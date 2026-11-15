@@ -23,7 +23,8 @@ from flychess.match import (ChessMatch, format_clock, get_current_match,
                            set_current_match)
 from flychess.model import FlyPolicy
 from flychess.players import (FlyPolicyPlayer, GeminiPlayer, HumanPlayer,
-                             StockfishPlayer, get_gemini_status)
+                             StockfishPlayer, find_stockfish, get_gemini_status,
+                             get_stockfish_info)
 from flychess.reward import compute_game_rewards
 from flychess.train import (evaluate_bullet_matches, evaluate_heldout, generate,
                             read_examples, train_rl_bullet, train_supervised)
@@ -32,7 +33,8 @@ st.set_page_config(page_title="ChessFly", page_icon="🪰", layout="wide", initi
 
 ROOT = Path(__file__).resolve().parent
 GRAPH_PATH = ROOT / "data" / "flywire-subgraph.npz"
-STOCKFISH_PATH = shutil.which("stockfish") or "/opt/homebrew/bin/stockfish"
+STOCKFISH_PATH = find_stockfish()
+STOCKFISH_INFO = get_stockfish_info(STOCKFISH_PATH)
 
 # Pre-RL and Post-RL checkpoint paths
 FLY_SFT_CKPT = ROOT / "outputs" / "fly-200.npz"
@@ -52,14 +54,18 @@ def ensure_parent(path: Path) -> None:
 
 
 def create_player(choice_key: str, custom_name: str = None):
-    """Instantiate player object from UI selection."""
+    """Instantiate player object from UI selection with graceful fallbacks."""
     if choice_key == "human":
         return HumanPlayer()
     elif choice_key == "fly_rl_pilot":
         ckpt = ROOT / "outputs" / "fly-rl-pilot.npz"
+        if not ckpt.is_file():
+            ckpt = FLY_SFT_CKPT
         return FlyPolicyPlayer(str(ckpt), str(GRAPH_PATH), name=custom_name or "Fly Policy (RL Pilot · Actor-Critic)")
     elif choice_key == "fly_sft_2k":
         ckpt = ROOT / "outputs" / "fly-supervised-2k.npz"
+        if not ckpt.is_file():
+            ckpt = FLY_SFT_CKPT
         return FlyPolicyPlayer(str(ckpt), str(GRAPH_PATH), name=custom_name or "Fly Policy (2k SFT · Oct-Validated)")
     elif choice_key == "fly_rl":
         ckpt = FLY_RL_CKPT if FLY_RL_CKPT.is_file() else FLY_SFT_CKPT
@@ -68,35 +74,53 @@ def create_player(choice_key: str, custom_name: str = None):
         return FlyPolicyPlayer(str(FLY_SFT_CKPT), str(GRAPH_PATH), name=custom_name or "Fly Policy (Pre-RL SFT)")
     elif choice_key == "shuf_sft_2k":
         ckpt = ROOT / "outputs" / "shuffled-supervised-2k.npz"
+        if not ckpt.is_file():
+            ckpt = SHUF_SFT_CKPT
         return FlyPolicyPlayer(str(ckpt), str(GRAPH_PATH), name=custom_name or "Shuffled Control (2k SFT)", shuffled=True)
     elif choice_key == "shuf_rl_pilot":
         ckpt = ROOT / "outputs" / "shuffled-rl-pilot.npz"
+        if not ckpt.is_file():
+            ckpt = SHUF_SFT_CKPT
         return FlyPolicyPlayer(str(ckpt), str(GRAPH_PATH), name=custom_name or "Shuffled Control (RL Pilot)", shuffled=True)
     elif choice_key == "shuffled":
         ckpt = SHUF_RL_CKPT if SHUF_RL_CKPT.is_file() else SHUF_SFT_CKPT
         return FlyPolicyPlayer(str(ckpt), str(GRAPH_PATH), name=custom_name or "Shuffled Control", shuffled=True)
     elif choice_key == "stockfish_weak":
-        return StockfishPlayer(STOCKFISH_PATH, difficulty="weak", name="Stockfish (Weak · Elo 1350)")
+        sf_label = STOCKFISH_INFO["name"] if STOCKFISH_INFO["available"] else "Stockfish"
+        return StockfishPlayer(STOCKFISH_PATH, difficulty="weak", name=custom_name or f"{sf_label} (Weak · Elo 1350)")
     elif choice_key == "stockfish_medium":
-        return StockfishPlayer(STOCKFISH_PATH, difficulty="medium", name="Stockfish (Medium · Elo 1600)")
+        sf_label = STOCKFISH_INFO["name"] if STOCKFISH_INFO["available"] else "Stockfish"
+        return StockfishPlayer(STOCKFISH_PATH, difficulty="medium", name=custom_name or f"{sf_label} (Medium · Elo 1600)")
     elif choice_key == "stockfish_strong":
-        return StockfishPlayer(STOCKFISH_PATH, difficulty="strong", name="Stockfish (Strong · Full)")
+        sf_label = STOCKFISH_INFO["name"] if STOCKFISH_INFO["available"] else "Stockfish"
+        return StockfishPlayer(STOCKFISH_PATH, difficulty="strong", name=custom_name or f"{sf_label} (Strong · Full)")
     elif choice_key == "gemini":
         return GeminiPlayer(name="Gemini (gemini-2.5-flash)")
     return HumanPlayer()
 
 
 # Header Banner
-col_h1, col_h2 = st.columns([4, 1])
+col_h1, col_h2 = st.columns([3, 2])
 with col_h1:
     st.title("🪰 ChessFly")
     st.caption("A fruit-fly connectome chess agent trained on real FlyWire synaptic circuits.")
 with col_h2:
     gemini_status = get_gemini_status()
+    engine_badge = (
+        f"<span style='color:#4ade80;'>{STOCKFISH_INFO['version']}</span>"
+        if STOCKFISH_INFO["available"]
+        else "<span style='color:#eab308;'>Not installed</span>"
+    )
+    gemini_badge = (
+        "<span style='color:#4ade80;'>Configured</span>"
+        if gemini_status["is_configured"]
+        else "<span style='color:#94a3b8;'>Gemini not configured</span>"
+    )
     st.markdown(
-        f"<div style='text-align:right; padding-top:10px; font-size:13px; color:#94a3b8;'>"
+        f"<div style='text-align:right; padding-top:10px; font-size:13px; color:#94a3b8; line-height:1.5;'>"
         f"FlyWire: <span style='color:#4ade80;'>256 neurons · 396 edges</span><br>"
-        f"Gemini API: {'<span style=\"color:#4ade80;\">Configured</span>' if gemini_status['is_configured'] else '<span style=\"color:#94a3b8;\">Not configured</span>'}"
+        f"Engine: {engine_badge}<br>"
+        f"Gemini API: {gemini_badge}"
         f"</div>",
         unsafe_allow_html=True
     )
@@ -129,14 +153,20 @@ with tab_play:
             "shuf_sft_2k": "🔀 Shuffled Control (2k SFT)",
             "shuf_rl_pilot": "🔀 Shuffled Control (RL Pilot)",
             "shuffled": "🔀 Shuffled Control (Previous)",
-            "stockfish_weak": "🤖 Stockfish (Weak · Elo 1350)",
-            "stockfish_medium": "🤖 Stockfish (Medium · Elo 1600)",
-            "stockfish_strong": "🤖 Stockfish (Strong · Skill 20)",
-        }
+        sf_label = STOCKFISH_INFO["name"] if STOCKFISH_INFO["available"] else "Stockfish"
+        if STOCKFISH_INFO["available"]:
+            player_options["stockfish_weak"] = f"🤖 {sf_label} (Weak · Elo 1350)"
+            player_options["stockfish_medium"] = f"🤖 {sf_label} (Medium · Elo 1600)"
+            player_options["stockfish_strong"] = f"🤖 {sf_label} (Strong · Skill 20)"
+        else:
+            player_options["stockfish_weak"] = "🤖 Stockfish (Unavailable · Not installed)"
+            player_options["stockfish_medium"] = "🤖 Stockfish (Unavailable · Not installed)"
+            player_options["stockfish_strong"] = "🤖 Stockfish (Unavailable · Not installed)"
+
         if gemini_status["is_configured"]:
             player_options["gemini"] = "✨ Gemini (gemini-2.5-flash)"
         else:
-            player_options["gemini"] = "✨ Gemini (Disabled · Not configured)"
+            player_options["gemini"] = "✨ Gemini (Disabled · Gemini not configured)"
 
         with c_p1:
             p_white = st.selectbox("⚪ White Player", list(player_options.keys()), index=0,
@@ -153,7 +183,9 @@ with tab_play:
             if st.button("Start New Match", type="primary"):
                 # Validate Gemini configuration if selected
                 if (p_white == "gemini" or p_black == "gemini") and not gemini_status["is_configured"]:
-                    st.error("Cannot start with Gemini: No API key configured. Set GEMINI_API_KEY or GOOGLE_API_KEY in your environment or a .env file.")
+                    st.error("Cannot start with Gemini: Gemini is not configured. Supply a GEMINI_API_KEY in environment or secrets to enable Gemini.")
+                elif (p_white.startswith("stockfish") or p_black.startswith("stockfish")) and not STOCKFISH_INFO["available"]:
+                    st.error(f"Cannot start with Stockfish: {STOCKFISH_INFO['error']}")
                 else:
                     if active_match is not None and not active_match.game_over:
                         active_match.game_over = True
@@ -206,14 +238,7 @@ with tab_play:
     else:
         state = active_match.get_state()
 
-    # Board options bar (fallback toggle)
-    c_ctrl1, c_ctrl2 = st.columns([4, 1])
-    with c_ctrl2:
-        use_fallback = st.checkbox("SVG Fallback Board", value=False,
-                                   help="Check to render a pure server-side SVG board if iframe custom components are blocked.")
-
-    if use_fallback:
-        # Pure SVG Fallback Board
+    def render_svg_board():
         st.caption("Rendering SVG Fallback Board (Pure Server-Side)")
         cur_board = chess.Board(state["fen"])
         last_m = chess.Move.from_uci(state["last_move"]) if state.get("last_move") else None
@@ -228,9 +253,15 @@ with tab_play:
             if state["is_human_turn"] and not state["is_game_over"]:
                 fb_moves = [m.uci() for m in cur_board.legal_moves]
                 if fb_moves:
-                    selected_uci = st.selectbox("Select Legal Move", fb_moves)
-                    if st.button("Submit Move", type="primary"):
+                    selected_uci = st.selectbox("Select Legal Move", fb_moves, key="fb_move_select")
+                    if st.button("Submit Move", type="primary", key="fb_submit_btn"):
                         if is_fresh:
+                            if (p_white == "gemini" or p_black == "gemini") and not gemini_status["is_configured"]:
+                                st.error("Cannot start with Gemini: Gemini is not configured.")
+                                return
+                            if (p_white.startswith("stockfish") or p_black.startswith("stockfish")) and not STOCKFISH_INFO["available"]:
+                                st.error(f"Cannot start with Stockfish: {STOCKFISH_INFO['error']}")
+                                return
                             white_obj = create_player(p_white)
                             black_obj = create_player(p_black)
                             new_match = ChessMatch(
@@ -248,6 +279,16 @@ with tab_play:
                             active_match.submit_human_move(selected_uci)
                             time.sleep(0.05)
                             st.rerun()
+
+    # Board options bar (fallback toggle)
+    c_ctrl1, c_ctrl2 = st.columns([4, 1])
+    with c_ctrl2:
+        use_fallback = st.checkbox("SVG Fallback Board", value=False,
+                                   help="Check to render a pure server-side SVG board if iframe custom components are blocked.")
+
+    event = None
+    if use_fallback:
+        render_svg_board()
     else:
         # Render custom interactive board
         component_props = {
@@ -271,8 +312,12 @@ with tab_play:
             "orientation": state.get("orientation", "white"),
         }
 
-        # Call custom component
-        event = interactive_board(**component_props, key="live_interactive_board")
+        # Call custom component with automatic fallback
+        try:
+            event = interactive_board(**component_props, key="live_interactive_board")
+        except Exception as comp_err:
+            st.warning(f"Interactive board component could not be loaded: {comp_err}. Displaying SVG board.")
+            render_svg_board()
 
         # Handle user move submission from board
         if event and event.get("type") == "user_move":
@@ -411,7 +456,12 @@ with tab_games:
                     "result": loaded_game.get("result", "*"),
                     "termination": loaded_game.get("termination_reason", ""),
                 }
-                replay_event = interactive_board(**replay_props, key=f"replay_{selected_game_id}")
+                try:
+                    replay_event = interactive_board(**replay_props, key=f"replay_{selected_game_id}")
+                except Exception as comp_err:
+                    st.warning(f"Interactive replay board component could not be loaded: {comp_err}. Displaying SVG board.")
+                    st.markdown(f'<div style="max-width:480px">{chess.svg.board(r_board, size=480, lastmove=chess.Move.from_uci(last_m_uci) if last_m_uci else None)}</div>', unsafe_allow_html=True)
+                    replay_event = None
                 if replay_event and replay_event.get("type") == "select_ply":
                     target_ply = replay_event.get("ply")
                     if target_ply is not None and target_ply != st.session_state.replay_ply:
@@ -468,25 +518,28 @@ with tab_rl:
     start_rl_btn = st.button("🚀 Run Online Bullet RL Training", type="primary")
 
     if start_rl_btn:
-        out_p = ROOT / rl_out_filename
-        ensure_parent(out_p)
-        with st.spinner(f"Running RL training across {rl_match_count} bullet games against Stockfish…"):
-            try:
-                ckpt_p, is_shuf = rl_source_choice
-                report = train_rl_bullet(
-                    graph=str(GRAPH_PATH),
-                    checkpoint=str(ROOT / ckpt_p),
-                    output=str(out_p),
-                    matches=int(rl_match_count),
-                    shuffled=is_shuf,
-                    stockfish_path=STOCKFISH_PATH,
-                    bot_difficulty="weak",
-                    lr=0.0005,
-                )
-                st.session_state["rl_train_report"] = report
-                st.success(f"RL training complete! Saved updated checkpoint to `{rl_out_filename}`.")
-            except Exception as e:
-                st.error(f"RL training failed: {e}")
+        if not STOCKFISH_INFO["available"]:
+            st.error("Cannot run RL training: Stockfish engine is not available on this system. Install stockfish (e.g. 'apt-get install stockfish') or set STOCKFISH_PATH.")
+        else:
+            out_p = ROOT / rl_out_filename
+            ensure_parent(out_p)
+            with st.spinner(f"Running RL training across {rl_match_count} bullet games against Stockfish…"):
+                try:
+                    ckpt_p, is_shuf = rl_source_choice
+                    report = train_rl_bullet(
+                        graph=str(GRAPH_PATH),
+                        checkpoint=str(ROOT / ckpt_p),
+                        output=str(out_p),
+                        matches=int(rl_match_count),
+                        shuffled=is_shuf,
+                        stockfish_path=STOCKFISH_PATH,
+                        bot_difficulty="weak",
+                        lr=0.0005,
+                    )
+                    st.session_state["rl_train_report"] = report
+                    st.success(f"RL training complete! Saved updated checkpoint to `{rl_out_filename}`.")
+                except Exception as e:
+                    st.error(f"RL training failed: {e}")
 
     if "rl_train_report" in st.session_state:
         rep = st.session_state["rl_train_report"]
@@ -511,34 +564,37 @@ with tab_rl:
     st.caption("Evaluates fresh 1+0 bullet games alternating colors against Stockfish.")
 
     if st.button("Run 4-Game Bullet Evaluation"):
-        with st.spinner("Running 4-game matched evaluations…"):
-            try:
-                eval_models = [
-                    ("Pre-RL Fly (fly-200.npz)", str(FLY_SFT_CKPT), False),
-                    ("Post-RL Fly (fly-rl-bullet.npz)", str(FLY_RL_CKPT), False) if FLY_RL_CKPT.is_file() else None,
-                    ("Pre-RL Shuffled Control (shuffled-200.npz)", str(SHUF_SFT_CKPT), True),
-                    ("Post-RL Shuffled Control (shuffled-rl-bullet.npz)", str(SHUF_RL_CKPT), True) if SHUF_RL_CKPT.is_file() else None,
-                ]
-                comp_rows = []
-                for entry in eval_models:
-                    if not entry or not Path(entry[1]).is_file():
-                        continue
-                    lbl, ckpt_p, is_shuf = entry
-                    pol = FlyPolicy(str(GRAPH_PATH), shuffled=is_shuf)
-                    pol.load_weights(ckpt_p)
-                    res = evaluate_bullet_matches(pol, stockfish_path=STOCKFISH_PATH, num_games=4, bot_difficulty="weak")
-                    comp_rows.append({
-                        "Model": lbl,
-                        "Record (W/D/L)": f"{res['wins']}/{res['draws']}/{res['losses']}",
-                        "Win Rate": f"{res['win_rate']:.1%}",
-                        "Flags Lost": res["flags_lost"],
-                        "Avg Plies": res["avg_plies"],
-                        "Avg Clock Used": f"{res['avg_clock_used_s']}s",
-                        "Mean ACPL": f"{res['mean_acpl']} cp",
-                    })
-                st.dataframe(comp_rows, hide_index=True)
-            except Exception as exc:
-                st.error(f"Error during bullet evaluation: {exc}")
+        if not STOCKFISH_INFO["available"]:
+            st.error("Cannot run bullet evaluation: Stockfish engine is not available on this system.")
+        else:
+            with st.spinner("Running 4-game matched evaluations…"):
+                try:
+                    eval_models = [
+                        ("Pre-RL Fly (fly-200.npz)", str(FLY_SFT_CKPT), False),
+                        ("Post-RL Fly (fly-rl-bullet.npz)", str(FLY_RL_CKPT), False) if FLY_RL_CKPT.is_file() else None,
+                        ("Pre-RL Shuffled Control (shuffled-200.npz)", str(SHUF_SFT_CKPT), True),
+                        ("Post-RL Shuffled Control (shuffled-rl-bullet.npz)", str(SHUF_RL_CKPT), True) if SHUF_RL_CKPT.is_file() else None,
+                    ]
+                    comp_rows = []
+                    for entry in eval_models:
+                        if not entry or not Path(entry[1]).is_file():
+                            continue
+                        lbl, ckpt_p, is_shuf = entry
+                        pol = FlyPolicy(str(GRAPH_PATH), shuffled=is_shuf)
+                        pol.load_weights(ckpt_p)
+                        res = evaluate_bullet_matches(pol, stockfish_path=STOCKFISH_PATH, num_games=4, bot_difficulty="weak")
+                        comp_rows.append({
+                            "Model": lbl,
+                            "Record (W/D/L)": f"{res['wins']}/{res['draws']}/{res['losses']}",
+                            "Win Rate": f"{res['win_rate']:.1%}",
+                            "Flags Lost": res["flags_lost"],
+                            "Avg Plies": res["avg_plies"],
+                            "Avg Clock Used": f"{res['avg_clock_used_s']}s",
+                            "Mean ACPL": f"{res['mean_acpl']} cp",
+                        })
+                    st.dataframe(comp_rows, hide_index=True)
+                except Exception as exc:
+                    st.error(f"Error during bullet evaluation: {exc}")
 
     st.divider()
     st.markdown("#### 🎯 Frozen November Benchmark Evaluation (120 Positions)")
@@ -567,6 +623,8 @@ with tab_rl:
             st.dataframe(b_rows, hide_index=True)
         except Exception as e:
             st.error(f"Error loading benchmark report: {e}")
+    else:
+        st.info("Benchmark evaluation report (outputs/november_benchmark_evaluation_report.json) not found.")
 
 # ==============================================================================
 # TAB 4: SFT / MOVE IMITATION
@@ -581,15 +639,18 @@ with tab_sft:
         n_games = st.number_input("Number of Games", min_value=10, max_value=1000, value=200, step=20)
         out_data_path = st.text_input("Dataset output path", "data/teacher-200.jsonl")
         if st.button("Generate Stockfish Positions"):
-            try:
-                dest = ROOT / out_data_path
-                ensure_parent(dest)
-                with st.spinner(f"Generating positions from {n_games} games…"):
-                    gen_rep = generate(str(dest), STOCKFISH_PATH, games=int(n_games))
-                st.success("Generated dataset!")
-                st.json(gen_rep)
-            except Exception as e:
-                st.error(str(e))
+            if not STOCKFISH_INFO["available"]:
+                st.error("Cannot generate positions: Stockfish engine is not available on this system.")
+            else:
+                try:
+                    dest = ROOT / out_data_path
+                    ensure_parent(dest)
+                    with st.spinner(f"Generating positions from {n_games} games…"):
+                        gen_rep = generate(str(dest), STOCKFISH_PATH, games=int(n_games))
+                    st.success("Generated dataset!")
+                    st.json(gen_rep)
+                except Exception as e:
+                    st.error(str(e))
 
     with sft_c2:
         st.markdown("**2 · Train SFT Policy & Control**")
@@ -646,6 +707,8 @@ with tab_sft:
             st.dataframe(sft_eval_rows, hide_index=True)
         except Exception as exc:
             st.error(f"Error loading SFT evaluation: {exc}")
+    else:
+        st.info("Teacher dataset (data/teacher-200.jsonl) not found. Use section 1 above to generate positions or run CLI generation.")
 
 # ==============================================================================
 # TAB 5: SCIENCE & ARCHITECTURE

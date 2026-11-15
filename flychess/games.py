@@ -16,12 +16,13 @@ def ensure_games_dir() -> Path:
 def save_game(game_data: Dict[str, Any]) -> str:
     """Save a completed game record to disk. Returns game_id."""
     ensure_games_dir()
-    game_id = game_data.get("id")
+    game_id = game_data.get("id") or game_data.get("game_id")
     if not game_id:
         timestamp_slug = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
         rand_slug = uuid.uuid4().hex[:6]
         game_id = f"game-{timestamp_slug}-{rand_slug}"
-        game_data["id"] = game_id
+    game_data["id"] = game_id
+    game_data["game_id"] = game_id
 
     if "timestamp" not in game_data:
         game_data["timestamp"] = datetime.now(timezone.utc).isoformat()

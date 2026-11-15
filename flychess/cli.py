@@ -8,6 +8,7 @@ from .env import ChessEnv
 from .graph import build_graph, make_fixture
 from .model import FlyPolicy, summarize
 from .match import BulletMatch
+from .players import find_stockfish
 from .reward import compute_game_rewards
 from .train import (generate, train_supervised, train_reinforce, read_examples,
                     accuracy, evaluate_heldout, evaluate_move_quality,
@@ -77,7 +78,7 @@ def main():
     bullet = sub.add_parser("bullet", help="Play a 1+0 bullet match against Stockfish")
     bullet.add_argument("--graph", required=True)
     bullet.add_argument("--checkpoint", required=True)
-    bullet.add_argument("--stockfish", default="/opt/homebrew/bin/stockfish")
+    bullet.add_argument("--stockfish", default=find_stockfish())
     bullet.add_argument("--color", choices=("white", "black"), default="white")
     bullet.add_argument("--difficulty", choices=("weak", "medium", "strong"), default="weak")
     bullet.add_argument("--shuffled", action="store_true")
@@ -87,7 +88,7 @@ def main():
     trl.add_argument("--checkpoint", required=True)
     trl.add_argument("--out", required=True)
     trl.add_argument("--matches", type=int, default=6)
-    trl.add_argument("--stockfish", default="/opt/homebrew/bin/stockfish")
+    trl.add_argument("--stockfish", default=find_stockfish())
     trl.add_argument("--difficulty", choices=("weak", "medium", "strong"), default="weak")
     trl.add_argument("--lr", type=float, default=0.0005)
     trl.add_argument("--seed", type=int, default=7)
@@ -96,7 +97,7 @@ def main():
     ebullet.add_argument("--graph", required=True)
     ebullet.add_argument("--checkpoint", required=True)
     ebullet.add_argument("--games", type=int, default=4)
-    ebullet.add_argument("--stockfish", default="/opt/homebrew/bin/stockfish")
+    ebullet.add_argument("--stockfish", default=find_stockfish())
     ebullet.add_argument("--difficulty", choices=("weak", "medium", "strong"), default="weak")
     ebullet.add_argument("--shuffled", action="store_true")
 
@@ -104,7 +105,7 @@ def main():
     ebench.add_argument("--graph", required=True)
     ebench.add_argument("--checkpoint")
     ebench.add_argument("--benchmark", default="data/benchmarks/november_benchmark_120.jsonl")
-    ebench.add_argument("--stockfish", default="/opt/homebrew/bin/stockfish")
+    ebench.add_argument("--stockfish", default=find_stockfish())
     ebench.add_argument("--shuffled", action="store_true")
 
     audit = sub.add_parser("audit-cases", help="Audit the 4 specific chess scenarios & repetition resistance")

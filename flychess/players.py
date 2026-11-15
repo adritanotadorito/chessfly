@@ -1,6 +1,7 @@
 """Player abstractions for Human, FlyPolicy, Stockfish, and Gemini."""
 import json
 import os
+import shutil
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -9,6 +10,74 @@ import chess.engine
 import numpy as np
 
 from .model import FlyPolicy
+
+
+def find_stockfish() -> Optional[str]:
+    """Discover Stockfish executable across Linux, macOS, and custom paths.
+
+    Checks in priority order:
+    1. STOCKFISH_PATH environment variable (if executable)
+    2. shutil.which("stockfish") (system PATH)
+    3. Common platform binary locations:
+       - /usr/games/stockfish (standard Debian/Ubuntu apt package on Linux / Streamlit Cloud)
+       - /usr/local/bin/stockfish (standard Linux/Unix local installs)
+       - /usr/bin/stockfish (standard Linux distribution binaries)
+       - /opt/homebrew/bin/stockfish (macOS Apple Silicon Homebrew)
+       - /usr/local/opt/stockfish/bin/stockfish (macOS Intel Homebrew)
+    """
+    env_p = os.environ.get("STOCKFISH_PATH")
+    if env_p and os.path.exists(env_p) and os.access(env_p, os.X_OK):
+        return env_p
+
+    which_p = shutil.which("stockfish")
+    if which_p and os.path.exists(which_p) and os.access(which_p, os.X_OK):
+        return which_p
+
+    candidates = [
+        "/usr/games/stockfish",
+        "/usr/local/bin/stockfish",
+        "/usr/bin/stockfish",
+        "/opt/homebrew/bin/stockfish",
+        "/usr/local/opt/stockfish/bin/stockfish",
+    ]
+    for p in candidates:
+        if os.path.exists(p) and os.access(p, os.X_OK):
+            return p
+    return None
+
+
+def get_stockfish_info(stockfish_path: Optional[str] = None) -> Dict[str, Any]:
+    """Retrieve actual runtime engine name, version, and availability dynamically."""
+    path = stockfish_path or find_stockfish()
+    if not path or not os.path.exists(path):
+        return {
+            "available": False,
+            "name": "Stockfish",
+            "version": "Not installed",
+            "path": None,
+            "error": "Stockfish binary not found on PATH or standard locations (/usr/games/stockfish, /usr/bin/stockfish, /opt/homebrew/bin/stockfish)."
+        }
+    try:
+        engine = chess.engine.SimpleEngine.popen_uci(path)
+        name = engine.id.get("name", "Stockfish")
+        author = engine.id.get("author", "")
+        engine.quit()
+        return {
+            "available": True,
+            "name": name,
+            "version": name,
+            "author": author,
+            "path": path,
+            "error": None
+        }
+    except Exception as e:
+        return {
+            "available": False,
+            "name": "Stockfish",
+            "version": f"Error: {e}",
+            "path": path,
+            "error": str(e)
+        }
 
 
 def load_env_file():
@@ -54,6 +123,8 @@ class FlyPolicyPlayer(BasePlayer):
                  seed: int = 7):
         self.name = name
         self.model = FlyPolicy(graph_path, seed=seed, shuffled=shuffled)
+        if not os.path.exists(model_path):
+            raise FileNotFoundError(f"Fly policy weights not found at: {model_path}")
         self.model.load_weights(model_path)
         self.sample_moves = sample_moves
 
@@ -66,10 +137,10 @@ class FlyPolicyPlayer(BasePlayer):
 
 class StockfishPlayer(BasePlayer):
     def __init__(self,
-                 stockfish_path: str = "/opt/homebrew/bin/stockfish",
+                 stockfish_path: Optional[str] = None,
                  difficulty: str = "weak",
                  name: Optional[str] = None):
-        self.stockfish_path = stockfish_path
+        self.stockfish_path = stockfish_path or find_stockfish()
         self.difficulty = difficulty
         self.name = name or f"Stockfish ({difficulty})"
 
@@ -85,6 +156,11 @@ class StockfishPlayer(BasePlayer):
                  my_clock: Optional[float] = None,
                  opp_clock: Optional[float] = None,
                  engine_instance: Optional[chess.engine.SimpleEngine] = None) -> chess.Move:
+        if not self.stockfish_path or not os.path.exists(self.stockfish_path):
+            raise FileNotFoundError(
+                "Stockfish engine binary not found. Install via 'apt-get install stockfish' (Linux) "
+                "or 'brew install stockfish' (macOS), or set STOCKFISH_PATH environment variable."
+            )
         close_after = False
         if engine_instance is None:
             engine = chess.engine.SimpleEngine.popen_uci(self.stockfish_path)
@@ -123,6 +199,13 @@ def get_gemini_status() -> Dict[str, Any]:
         pass
 
     raw_key = os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY") or ""
+    if not raw_key:
+        try:
+            import streamlit as st
+            raw_key = st.secrets.get("GEMINI_API_KEY", "") or st.secrets.get("GOOGLE_API_KEY", "")
+        except Exception:
+            pass
+
     raw_key = raw_key.strip()
     key_present = bool(raw_key and not raw_key.lower().startswith("your_"))
 

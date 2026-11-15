@@ -9,6 +9,7 @@ import numpy as np
 from .env import ChessEnv
 from .match import BulletMatch
 from .model import FlyPolicy
+from .players import find_stockfish
 from .reward import compute_game_rewards, move_audit, potential, result_value, features
 
 
@@ -388,7 +389,7 @@ def train_rl_bullet(graph: str,
                     matches: int = 6,
                     seed: int = 7,
                     shuffled: bool = False,
-                    stockfish_path: str = "/opt/homebrew/bin/stockfish",
+                    stockfish_path: str = None,
                     bot_difficulty: str = "weak",
                     lr: float = 0.0005,
                     gamma: float = 0.99,
@@ -397,6 +398,12 @@ def train_rl_bullet(graph: str,
     
     Uses value head V(s) to compute advantage A_t = G_t - V(s_t), updating biological edge gains.
     """
+    stockfish_path = stockfish_path or find_stockfish()
+    if not stockfish_path or not Path(stockfish_path).exists():
+        raise FileNotFoundError(
+            "Stockfish binary not found. Please install Stockfish (e.g. 'apt-get install stockfish' "
+            "or 'brew install stockfish') or set STOCKFISH_PATH environment variable."
+        )
     model = FlyPolicy(graph, seed=seed, shuffled=shuffled)
     model.load_weights(checkpoint)
 
@@ -515,11 +522,17 @@ def train_rl_bullet(graph: str,
 
 
 def evaluate_bullet_matches(model: FlyPolicy,
-                            stockfish_path: str = "/opt/homebrew/bin/stockfish",
+                            stockfish_path: str = None,
                             num_games: int = 4,
                             bot_difficulty: str = "weak",
                             sample_moves: bool = False) -> dict:
     """Run matched bullet games alternating colors against fixed Stockfish bot."""
+    stockfish_path = stockfish_path or find_stockfish()
+    if not stockfish_path or not Path(stockfish_path).exists():
+        raise FileNotFoundError(
+            "Stockfish binary not found. Please install Stockfish (e.g. 'apt-get install stockfish' "
+            "or 'brew install stockfish') or set STOCKFISH_PATH environment variable."
+        )
     analysis_engine = chess.engine.SimpleEngine.popen_uci(stockfish_path)
     analysis_engine.configure({"Threads": 1, "Hash": 16})
 
@@ -595,7 +608,7 @@ def evaluate_bullet_matches(model: FlyPolicy,
 
 def evaluate_frozen_benchmark(model: FlyPolicy,
                               benchmark_path: str = "data/benchmarks/november_benchmark_120.jsonl",
-                              stockfish_path: str = "/opt/homebrew/bin/stockfish",
+                              stockfish_path: str = None,
                               engine_nodes: int = 15000) -> dict:
     """Evaluate model on the strictly frozen November 2013 benchmark (120 positions).
     
@@ -603,6 +616,12 @@ def evaluate_frozen_benchmark(model: FlyPolicy,
     legal move rate, tactical challenge accuracy (20 positions), representative game accuracy (100 positions),
     and value prediction MSE.
     """
+    stockfish_path = stockfish_path or find_stockfish()
+    if not stockfish_path or not Path(stockfish_path).exists():
+        raise FileNotFoundError(
+            "Stockfish binary not found. Please install Stockfish (e.g. 'apt-get install stockfish' "
+            "or 'brew install stockfish') or set STOCKFISH_PATH environment variable."
+        )
     with open(benchmark_path) as f:
         lines = [json.loads(l) for l in f]
     positions = lines[1:] if "metadata" in lines[0] else lines

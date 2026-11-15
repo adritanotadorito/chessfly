@@ -11,8 +11,10 @@ import chess.engine
 import chess.pgn
 import numpy as np
 
-STOCKFISH_PATH = shutil.which("stockfish") or "/opt/homebrew/bin/stockfish"
-ZSTD_PATH = shutil.which("zstd") or "/opt/homebrew/bin/zstd"
+from .players import find_stockfish
+
+STOCKFISH_PATH = find_stockfish()
+ZSTD_PATH = shutil.which("zstd") or (p if os.path.exists(p := "/usr/bin/zstd") else (q if os.path.exists(q := "/opt/homebrew/bin/zstd") else "zstd"))
 
 PINNED_ENGINE_CONFIG = {
     "threads": 1,

@@ -12,7 +12,8 @@ import numpy as np
 
 from .games import save_game
 from .model import FlyPolicy
-from .players import BasePlayer, FlyPolicyPlayer, HumanPlayer, StockfishPlayer
+from .players import (BasePlayer, FlyPolicyPlayer, HumanPlayer,
+                     StockfishPlayer, find_stockfish)
 
 
 def format_clock(seconds: Optional[float]) -> str:
@@ -400,7 +401,7 @@ class BulletMatch(ChessMatch):
     """Backward-compatible subclass for existing CLI / tests."""
     def __init__(self,
                  fly_model: FlyPolicy,
-                 stockfish_path: str = "/opt/homebrew/bin/stockfish",
+                 stockfish_path: Optional[str] = None,
                  fly_color: chess.Color = chess.WHITE,
                  base_time: float = 60.0,
                  increment: float = 0.0,
@@ -408,7 +409,7 @@ class BulletMatch(ChessMatch):
                  bot_options: Optional[dict] = None,
                  sample_moves: bool = False):
         self.fly_model = fly_model
-        self.stockfish_path = stockfish_path
+        self.stockfish_path = stockfish_path or find_stockfish()
         self.fly_color = fly_color
         self.bot_difficulty = bot_difficulty
         self.sample_moves = sample_moves
