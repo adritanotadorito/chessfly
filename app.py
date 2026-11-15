@@ -153,6 +153,7 @@ with tab_play:
             "shuf_sft_2k": "🔀 Shuffled Control (2k SFT)",
             "shuf_rl_pilot": "🔀 Shuffled Control (RL Pilot)",
             "shuffled": "🔀 Shuffled Control (Previous)",
+        }
         sf_label = STOCKFISH_INFO["name"] if STOCKFISH_INFO["available"] else "Stockfish"
         if STOCKFISH_INFO["available"]:
             player_options["stockfish_weak"] = f"🤖 {sf_label} (Weak · Elo 1350)"
