@@ -1,3 +1,29 @@
+# ChessFly: Counterplay — AfterQuery "Break the Agent" (Junction 2026)
+
+**A chess RL environment that tests whether AI agents anticipate the opponent's reply, with engine-verified rewards that stopping early or tampering can't game.**
+
+| | |
+|---|---|
+| 🎮 Live app | https://chessfly.streamlit.app |
+| 📦 Harbor task | [`harbor_task/`](harbor_task/) — see [Harbor Benchmark](#harbor-benchmark-chessfly-counterplay-afterquery-break-the-agent) below |
+| 📊 Comparison report | [`reports/harbor_comparison.md`](reports/harbor_comparison.md) (observed trials only) |
+| 🧾 Run logs | [`harbor_runs/`](harbor_runs/) |
+
+**Observed Harbor results:** reference (oracle) **1.000** · do-nothing **0.000** · stop after 1 of 4 positions **0.0625** · stop after 2 of 4 **0.250**.
+
+**One-command reproduction** (Docker running):
+```bash
+pip install harbor && bash scripts/eval_harbor.sh
+```
+**Frontier agent** (OpenCode, the judges' 3-trial protocol):
+```bash
+bash scripts/eval_frontier.sh gemini/<model> 3 && python3 scripts/compare_runs.py
+```
+
+**Frontier status, honestly:** two Gemini attempts were recorded, and both errored before the model played a move. The first failed because the API key was not forwarded (since fixed). The second failed because Google returned "gemini-2.5-pro no longer available to new users". Both are marked *errored* and excluded from means. **The frontier gap is not yet measured.**
+
+---
+
 # FlyChess: a fly-wired chess policy starter
 
 This is a **small, runnable experiment**, not a completed AfterQuery submission or evidence that a biological fruit fly learned chess. The policy's recurrent connections come from a fixed subset of FlyWire connections when you supply the real `connections.csv` from [train-your-fly](https://github.com/eudald-seeslab/train-your-fly). The board adapter, move readout, value head, and training algorithm are engineered. A synthetic graph is included **only** to verify that the code runs before the real dataset is available.
@@ -259,7 +285,7 @@ python3 scripts/compare_runs.py                           # -> reports/harbor_co
 `compare_runs.py` aggregates every trial in `harbor_runs/`, including the reference, nop, stop-early, and frontier trials, and reports mean/min/max plus per-scenario score and final cp. The same table appears in the Streamlit app under **🏁 Frontier Benchmark**. Equivalent raw command: `harbor run -p ./harbor_task -a opencode -m <provider/model> -k 3`.
 
 ### Honest limitations
-- **No frontier-agent run has been recorded yet**, so the gap versus the oracle is **unmeasured**. We make no claims about which mistakes frontier models make.
+- **No frontier-agent trial has completed yet.** Two Gemini attempts errored at the API level before any move was played. The gap versus the oracle is therefore **unmeasured**. We make no claims about which mistakes frontier models make.
 - The oracle is a fixed move table that is valid against the pinned opponent, not a general solver. Scenarios 1 (Bxb2 wins the queen) and 2 (parry Scholar's mate) are easy calibration positions. Scenarios 3 (…Qxg2 counter-strike) and 4 (attack vs. consolidate) are the harder ones.
 - `network_mode = "public"`, because the agent harness needs its model API. An agent could therefore download its own chess engine. `instruction.md` forbids this, but the environment does not technically prevent it.
 - Scores depend on the Stockfish build. The verifier logs the engine name it used, and Docker images pin Debian bookworm's `stockfish` package (15.1).
