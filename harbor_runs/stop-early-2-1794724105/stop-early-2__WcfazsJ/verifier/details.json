@@ -1,0 +1,31 @@
+{
+  "engine": "Stockfish 15.1",
+  "completed": 2,
+  "gate": 0.5,
+  "raw_sum": 0.5,
+  "reward": 0.25,
+  "scenarios": [
+    {
+      "scenario_id": "scenario_1_poisoned_material",
+      "score": 0.25,
+      "cp": 664,
+      "reason": "evaluated"
+    },
+    {
+      "scenario_id": "scenario_2_acute_threat_defense",
+      "score": 0.25,
+      "cp": 30,
+      "reason": "evaluated"
+    },
+    {
+      "scenario_id": "scenario_3_tactical_counterplay",
+      "score": 0.0,
+      "reason": "incomplete_or_stopped_early"
+    },
+    {
+      "scenario_id": "scenario_4_sound_vs_unsound",
+      "score": 0.0,
+      "reason": "incomplete_or_stopped_early"
+    }
+  ]
+}

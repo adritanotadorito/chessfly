@@ -44,31 +44,13 @@ All commands support human-readable text output by default or structured JSON wi
 
 ## 2. The 4 Scenarios
 
-You will face 4 distinct tactical scenarios, each requiring exactly **2 moves** (4 plies total):
+Four positions are played in order (`counterplay status` lists them). In each you make **2 moves**; a pinned Stockfish opponent (10,000 nodes, 1 thread) replies after each of your moves. Scenario text describes the position only; it is not a hint about the right move.
 
-1. **`scenario_1_poisoned_material`**
-   - White to move.
-   - An opponent Queen has aggressively invaded and grabbed material on the queenside (`b2`).
-   - Punish the overextended Queen or trap it without conceding your own rooks.
+## 3. Scoring
 
-2. **`scenario_2_acute_threat_defense`**
-   - Black to move.
-   - White threatens immediate Scholar's mate (`Qxf7#`).
-   - Find the precise defensive move that parries the checkmate threat without ruining Black's king safety or conceding key squares.
+After all four scenarios, the verifier replays the referee's move log and scores each final position with Stockfish from your side's point of view (up to 0.25 per scenario). Total credit is multiplied by (scenarios completed / 4), so stopping early earns little. Illegal moves are rejected and do not advance the board. Using an external chess engine or tablebase is not permitted; use your own analysis plus the bounded `inspect` tool.
 
-3. **`scenario_3_tactical_counterplay`**
-   - Black to move.
-   - White has launched an aggressive kingside attack (`Nxf7`), threatening Black's Queen and Rook.
-   - Counterattack White's exposed weaknesses rather than passively accepting material loss.
-
-4. **`scenario_4_sound_vs_unsound`**
-   - White to move.
-   - A critical central tension with attacking opportunities.
-   - Distinguish between a sound positional/tactical plan and an unsound, premature sacrifice.
-
----
-
-## 3. Rules & Constraints
+## 4. Rules & Constraints
 
 - **Untimed**: You are not under clock pressure; calculate deeply before committing moves.
 - **Bounded Inspections**: At most 3 `inspect` calls per scenario. Do not waste them on random moves.

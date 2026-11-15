@@ -29,7 +29,7 @@ def evaluate_scenario_performance(sc_data: dict, engine: chess.engine.SimpleEngi
     moves = sc_data.get("moves", [])
 
     # If scenario was not completed or has no moves -> 0.0
-    if not moves or len(moves) < sc_data.get("remaining_turns", 2) and not sc_data.get("completed", False):
+    if not sc_data.get("completed", False) or len(moves) < 2:
         return {"scenario_id": sc_id, "score": 0.0, "reason": "incomplete_or_stopped_early"}
 
     # Replay moves independently on a fresh board
@@ -159,6 +159,9 @@ def verify():
         return
 
     engine = chess.engine.SimpleEngine.popen_uci(STOCKFISH_PATH)
+    engine.configure({"Threads": 1, "Hash": 16})
+    engine_name = engine.id.get("name")
+    print(f"Engine: {engine.id.get('name')} at {STOCKFISH_PATH} (Threads=1, Hash=16, nodes=15000)")
     total_score = 0.0
     details = []
 
@@ -171,8 +174,19 @@ def verify():
     finally:
         engine.quit()
 
-    # Bounded in [0.0, 1.0]
-    final_score = max(0.0, min(1.0, round(total_score, 4)))
+    # Completion gate: stopping early is penalised quadratically.
+    # 1/4 scenarios completed keeps 25% of its earned credit, 2/4 keeps 50%, etc.
+    n_done = sum(1 for d in details if d.get("reason") != "incomplete_or_stopped_early")
+    gate = n_done / 4.0
+    print(f"Completed scenarios: {n_done}/4 -> completion gate x{gate:.2f}")
+    final_score = max(0.0, min(1.0, round(total_score * gate, 4)))
+    try:
+        Path(os.path.dirname(REWARD_OUTPUT) or ".").mkdir(parents=True, exist_ok=True)
+        with open(os.path.join(os.path.dirname(REWARD_OUTPUT), "details.json"), "w") as f:
+            json.dump({"engine": engine_name, "completed": n_done, "gate": gate,
+                       "raw_sum": total_score, "reward": final_score, "scenarios": details}, f, indent=2)
+    except Exception as e:
+        print(f"details.json not written: {e}")
     print("-" * 60)
     print(f"TOTAL VERIFIED REWARD: {final_score:.4f} / 1.0000")
     print("-" * 60)

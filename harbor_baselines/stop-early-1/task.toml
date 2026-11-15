@@ -1,0 +1,24 @@
+schema_version = "1.4"
+artifacts = ["/logs/verifier/details.json"]
+
+[metadata]
+name = "chessfly-counterplay"
+description = "ChessFly: Counterplay - 4 chess positions, 2 decisions each against a pinned Stockfish opponent, bounded candidate inspection, engine-verified reward."
+author = "ChessFly"
+difficulty = "hard"
+category = "games"
+tags = ["chess", "tactics", "counterplay"]
+
+[verifier]
+timeout_sec = 300.0
+environment_mode = "shared"
+user = "root"
+
+[agent]
+timeout_sec = 1200.0
+user = "agent"
+
+[environment]
+network_mode = "public"
+build_timeout_sec = 900.0
+os = "linux"

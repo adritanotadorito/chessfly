@@ -55,7 +55,9 @@ class RefereeSession:
         self.save_log()
 
     def _get_engine(self):
-        return chess.engine.SimpleEngine.popen_uci(STOCKFISH_PATH)
+        eng = chess.engine.SimpleEngine.popen_uci(STOCKFISH_PATH)
+        eng.configure({"Threads": 1, "Hash": 16})  # deterministic with fixed node limits
+        return eng
 
     def save_log(self):
         log_dir = os.path.dirname(LOG_PATH)

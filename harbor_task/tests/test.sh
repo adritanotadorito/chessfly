@@ -1,26 +1,9 @@
 #!/usr/bin/env bash
-set -e
-
-echo "[Verifier] Running ChessFly Counterplay Verification..."
-
+# Runs as root in the shared container. Replays the referee-owned move log
+# (/referee/logs/session.json, writable only by UID 1001) with Stockfish and
+# writes exactly one number in [0,1] to /logs/verifier/reward.txt.
 mkdir -p /logs/verifier
-
-# Run the authoritative verifier
-if [ -f "/referee/verifier.py" ]; then
-    python3 /referee/verifier.py
-else
-    DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-    if [ -x "$DIR/../../.venv/bin/python" ]; then
-        "$DIR/../../.venv/bin/python" "$DIR/verifier.py"
-    else
-        python3 "$DIR/verifier.py"
-    fi
-fi
-
-if [ -f "/logs/verifier/reward.txt" ]; then
-    echo "[Verifier] Successfully generated reward:"
-    cat /logs/verifier/reward.txt
-else
-    echo "0.0000" > /logs/verifier/reward.txt
-    echo "[Verifier] Fallback reward written: 0.0000"
-fi
+rm -f /logs/verifier/reward.txt
+python3 /referee/verifier.py || echo "0.0000" > /logs/verifier/reward.txt
+[ -s /logs/verifier/reward.txt ] || echo "0.0000" > /logs/verifier/reward.txt
+echo "[Verifier] reward: $(cat /logs/verifier/reward.txt)"

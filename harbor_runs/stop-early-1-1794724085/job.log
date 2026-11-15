@@ -1,0 +1,26 @@
+Agent 'oracle' does not declare an options_model; leftover kwargs are ignored
+Skipping image OS validation for hb__4709da9584bc4dfc00093317c87ee61d: docker inspect returned 1
+Collecting main service artifacts
+compose cp failed; retrying download with engine cp: Docker compose command failed for environment stop-early-1. Command: docker compose --project-name stop-early-1__tzjryge__env --project-directory /Users/adritamitra/Desktop/prsnl/chessfly/harbor_baselines/stop-early-1/environment -f /private/var/folders/3f/4pfz7c6127q8vrxv3p9cshcr0000gn/T/tmp4cvgpjwm/stop-early-1__tZjryGE__env-docker-compose-resources.json -f /private/tmp/claude-501/-Users-adritamitra--claude-spares-spare-LVZSTw/3224fc4e-3a8c-4d54-9732-b9d6d9a54ecb/scratchpad/venv/lib/python3.13/site-packages/harbor/environments/docker/docker-compose-build.yaml -f /private/var/folders/3f/4pfz7c6127q8vrxv3p9cshcr0000gn/T/tmp_1qrek0f/docker-compose-environment.json -f /private/var/folders/3f/4pfz7c6127q8vrxv3p9cshcr0000gn/T/tmpjlzc5oq8/docker-compose-mounts.json cp main:/logs/verifier/details.json /Users/adritamitra/Desktop/prsnl/chessfly/harbor_runs/stop-early-1-1794724085/stop-early-1__tZjryGE/artifacts/logs/verifier/details.json. Return code: 1. Stdout:  stop-early-1__tzjryge__env-main-1 copy stop-early-1__tzjryge__env-main-1:/logs/verifier/details.json to /Users/adritamitra/Desktop/prsnl/chessfly/harbor_runs/stop-early-1-1794724085/stop-early-1__tZjryGE/artifacts/logs/verifier/details.json Copying
+Error response from daemon: Could not find the file /logs/verifier/details.json in container ae945e62be070db43ca77e747fd6bb8176424344fd20ca4a5775bc32efb5b292
+. Stderr: None. 
+Failed to download artifact '/logs/verifier/details.json' from service 'main' (best-effort)
+Traceback (most recent call last):
+  File "/private/tmp/claude-501/-Users-adritamitra--claude-spares-spare-LVZSTw/3224fc4e-3a8c-4d54-9732-b9d6d9a54ecb/scratchpad/venv/lib/python3.13/site-packages/harbor/trial/artifact_handler.py", line 359, in _download_artifact
+    await source_env.service_download_file(
+    ...<3 lines>...
+    )
+  File "/private/tmp/claude-501/-Users-adritamitra--claude-spares-spare-LVZSTw/3224fc4e-3a8c-4d54-9732-b9d6d9a54ecb/scratchpad/venv/lib/python3.13/site-packages/harbor/environments/docker/docker.py", line 1363, in service_download_file
+    await self.download_file(source_path, target_path)
+  File "/private/tmp/claude-501/-Users-adritamitra--claude-spares-spare-LVZSTw/3224fc4e-3a8c-4d54-9732-b9d6d9a54ecb/scratchpad/venv/lib/python3.13/site-packages/harbor/environments/docker/docker.py", line 1348, in download_file
+    await self._platform.download_file(source_path, target_path)
+  File "/private/tmp/claude-501/-Users-adritamitra--claude-spares-spare-LVZSTw/3224fc4e-3a8c-4d54-9732-b9d6d9a54ecb/scratchpad/venv/lib/python3.13/site-packages/harbor/environments/docker/docker_unix.py", line 278, in download_file
+    await self._download_via_engine_cp(source_path, target_path, service)
+  File "/private/tmp/claude-501/-Users-adritamitra--claude-spares-spare-LVZSTw/3224fc4e-3a8c-4d54-9732-b9d6d9a54ecb/scratchpad/venv/lib/python3.13/site-packages/harbor/environments/docker/docker_unix.py", line 253, in _download_via_engine_cp
+    await self._engine_cp(f"{container}:{container_path}", str(target_path))
+  File "/private/tmp/claude-501/-Users-adritamitra--claude-spares-spare-LVZSTw/3224fc4e-3a8c-4d54-9732-b9d6d9a54ecb/scratchpad/venv/lib/python3.13/site-packages/harbor/environments/docker/docker_unix.py", line 244, in _engine_cp
+    raise RuntimeError(
+        f"Engine cp failed ({source!r} -> {destination!r}): {output}"
+    )
+RuntimeError: Engine cp failed ('ae945e62be07:/logs/verifier/details.json' -> 'harbor_runs/stop-early-1-1794724085/stop-early-1__tZjryGE/artifacts/logs/verifier/details.json'): Error response from daemon: Could not find the file /logs/verifier/details.json in container ae945e62be07
+

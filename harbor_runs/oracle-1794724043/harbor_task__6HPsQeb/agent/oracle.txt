@@ -1,0 +1,92 @@
+=== ChessFly: Counterplay - Reference Oracle Solution ===
+
+[Playing Scenario 1: Queen Raid] Remaining decisions: 2
+Inspecting candidate move 'c1b2'...
+  Inspection result: eval=676 cp, predicted reply=g8h6
+Submitting move 'c1b2'...
+  Move applied: c1b2, Opponent reply: b8d7
+
+[Playing Scenario 1: Queen Raid] Remaining decisions: 1
+Inspecting candidate move 'e2e4'...
+  Inspection result: eval=671 cp, predicted reply=g8f6
+Submitting move 'e2e4'...
+  Move applied: e2e4, Opponent reply: g8f6
+
+[Playing Scenario 2: Acute Threat Defense] Remaining decisions: 2
+Inspecting candidate move 'g7g6'...
+  Inspection result: eval=32 cp, predicted reply=h5d1
+Submitting move 'g7g6'...
+  Move applied: g7g6, Opponent reply: h5d1
+
+[Playing Scenario 2: Acute Threat Defense] Remaining decisions: 1
+Inspecting candidate move 'g8f6'...
+  Inspection result: eval=-2 cp, predicted reply=b1c3
+Submitting move 'g8f6'...
+  Move applied: g8f6, Opponent reply: d2d3
+
+[Playing Scenario 3: Knight Fork] Remaining decisions: 2
+Inspecting candidate move 'g5g2'...
+  Inspection result: eval=426 cp, predicted reply=d2d3
+Submitting move 'g5g2'...
+  Move applied: g5g2, Opponent reply: d2d3
+
+[Playing Scenario 3: Knight Fork] Remaining decisions: 1
+Inspecting candidate move 'g2h1'...
+  Inspection result: eval=372 cp, predicted reply=e1d2
+Submitting move 'g2h1'...
+  Move applied: g2h1, Opponent reply: e1d2
+
+[Playing Scenario 4: Attack or Consolidate] Remaining decisions: 2
+Inspecting candidate move 'c3d4'...
+  Inspection result: eval=152 cp, predicted reply=c5b6
+Submitting move 'c3d4'...
+  Move applied: c3d4, Opponent reply: c5b6
+
+[Playing Scenario 4: Attack or Consolidate] Remaining decisions: 1
+Inspecting candidate move 'a1c1'...
+  Inspection result: eval=166 cp, predicted reply=f7f6
+Submitting move 'a1c1'...
+  Move applied: a1c1, Opponent reply: f7f6
+Session completed successfully!
+
+Final Status:
+{
+  "status": "ok",
+  "completed": true,
+  "current_scenario_idx": 4,
+  "total_scenarios": 4,
+  "scenarios": [
+    {
+      "id": "scenario_1_poisoned_material",
+      "name": "Scenario 1: Queen Raid",
+      "completed": true,
+      "remaining_turns": 0,
+      "inspections_left": 1,
+      "moves_count": 2
+    },
+    {
+      "id": "scenario_2_acute_threat_defense",
+      "name": "Scenario 2: Acute Threat Defense",
+      "completed": true,
+      "remaining_turns": 0,
+      "inspections_left": 1,
+      "moves_count": 2
+    },
+    {
+      "id": "scenario_3_tactical_counterplay",
+      "name": "Scenario 3: Knight Fork",
+      "completed": true,
+      "remaining_turns": 0,
+      "inspections_left": 1,
+      "moves_count": 2
+    },
+    {
+      "id": "scenario_4_sound_vs_unsound",
+      "name": "Scenario 4: Attack or Consolidate",
+      "completed": true,
+      "remaining_turns": 0,
+      "inspections_left": 1,
+      "moves_count": 2
+    }
+  ]
+}

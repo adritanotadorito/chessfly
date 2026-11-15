@@ -19,6 +19,11 @@ ORACLE_MOVES = {
 }
 
 
+# Baseline knobs (used only by harbor_baselines/*): STOP_AFTER=k plays k scenarios then quits.
+STOP_AFTER = int(os.environ["STOP_AFTER"]) if os.environ.get("STOP_AFTER") else None
+DONE_LIMIT = list(ORACLE_MOVES.keys())
+
+
 def run_cmd(args):
     cli = os.environ.get("COUNTERPLAY_CLI", "counterplay")
     if not shutil.which(cli):
@@ -48,6 +53,9 @@ def solve():
             break
 
         sc_id = obs["scenario_id"]
+        if STOP_AFTER is not None and sc_id in DONE_LIMIT[STOP_AFTER:]:
+            print(f"STOP_AFTER={STOP_AFTER}: stopping early.")
+            break
         sc_name = obs["scenario_name"]
         remaining = obs["remaining_turns"]
         inspections = obs["inspections_left"]

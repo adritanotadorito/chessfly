@@ -214,66 +214,49 @@ streamlit run app.py
 
 ---
 
-## Harbor Benchmark: ChessFly: Counterplay (AfterQuery "Break the Agent" Challenge)
+## Harbor Benchmark: ChessFly: Counterplay (AfterQuery "Break the Agent")
 
-A dedicated, isolated benchmark task built to evaluate frontier AI agents on tactical chess counterplay, defense, and poisoned material recognition under bounded engine inspection.
+**Task:** `harbor_task/`, a Harbor task (schema 1.4) with `instruction.md`, `task.toml`, `environment/Dockerfile`, `tests/test.sh`, and `solution/solve.sh`.
 
-### Challenge Evaluation Criteria Addressed
-- **Gap (30 pts)**: Frontier agents without deep tactical verification repeatedly blunder in counterplay or fall for poisoned material, scoring substantially below the reference oracle.
-- **Meaningful Difficulty (30 pts)**: Failures stem from actual decision-making under uncertainty, not lack of rules or broken tooling. Agents are given standard FEN, legal UCI move lists, and a bounded quota of 3 inspections per scenario (5k node engine preview).
-- **Reward Integrity (25 pts)**: All non-completion shortcuts are penalized:
-  - Do-nothing (`nop`): **0.0000**
-  - Stop early (1 scenario completed): **0.2500**
-  - Careless blunders / falling for poisoned material: **0.0000**
-  - Illegal moves: deterministically rejected without advancing board state
-  - Anti-tampering: direct writes to `/logs/verifier/reward.txt` are overwritten by the authoritative verifier replaying `/referee/logs/session.json`.
-- **Craft (15 pts)**: Fully compliant with the Harbor specification. Single-command execution for reference solution, verifier, and baseline test suite.
+**World.** There are four chess positions. In each one the agent makes 2 moves, and a pinned Stockfish opponent replies after each move (10k nodes, 1 thread, deterministic). The agent sees the FEN, the legal moves, and the move history through the `counterplay` CLI (`observe / inspect / play / status`). It gets **3 bounded `inspect` calls per scenario**: each is a shallow engine look at one candidate, showing its eval and the predicted reply. The task is untimed, and nothing hidden is needed to play well.
 
-### Harbor Task Directory Structure
+**Reward** (`tests/test.sh` → `/logs/verifier/reward.txt`, one number in [0,1]). The verifier runs as root. It replays the referee's move log (`/referee/logs/session.json`, owned by UID 1001 and unreadable by the agent) on a fresh board. It scores each final position with Stockfish (15k nodes) from the agent's side, up to 0.25 per scenario on cp thresholds. The total is then multiplied by **(completed scenarios / 4)**, so stopping early earns little.
+
+**Isolation.** The agent runs as UID 1000 (`[agent] user = "agent"`). The referee daemon, Stockfish binary, and session log live under `/referee` (mode 700, UID 1001). The agent talks to the referee only through a UNIX socket that accepts `observe/inspect/play/status`; there is no reset command.
+
+### Observed Harbor results (Harbor 0.26.0, Docker 28.3.2, arm64, image Stockfish 15.1 from Debian bookworm)
+
+| Run | Command | Reward |
+|---|---|---|
+| Reference (oracle) | `harbor run -p ./harbor_task -a oracle` | **1.000** |
+| Do-nothing | `harbor run -p ./harbor_task -a nop` | **0.000** |
+| Stop early after 1/4 scenarios (real oracle moves) | `harbor run -p ./harbor_baselines/stop-early-1 -a oracle` | **0.0625** |
+| Stop early after 2/4 scenarios | `harbor run -p ./harbor_baselines/stop-early-2 -a oracle` | **0.250** |
+
+Full Harbor job logs, including verifier stdout and per-scenario cp scores, are in `harbor_runs/`.
+
+**Exploit probes run as the agent user inside the built image (observed):**
+- `ls /referee` and reading `session.json` → Permission denied.
+- Executing `/referee/bin/stockfish` → Permission denied; there is no Stockfish on PATH.
+- Writing `/logs/verifier/reward.txt` → Permission denied, and the verifier deletes and rewrites it anyway.
+- Killing the daemon → Operation not permitted.
+- A 4th `inspect` → rejected.
+- An illegal `play` → rejected, and the board does not advance.
+- `{"command":"reset"}` → "Unknown command".
+- `sudo` → not installed; `su referee` → authentication failure.
+
+### One-command evaluation
+```bash
+pip install harbor            # needs Docker running
+bash scripts/eval_harbor.sh   # oracle, nop, stop-early-1, stop-early-2
 ```
-harbor_task/
-├── task.toml                  # Harbor task definition and verifier metadata
-├── instruction.md             # Clear agent instructions & CLI tool documentation
-├── environment/
-│   ├── Dockerfile             # Multi-user container with isolated referee
-│   ├── entrypoint.sh          # Daemon initialization & privilege separation
-│   ├── referee_daemon.py      # Authoritative game engine & Stockfish sidecar
-│   ├── scenarios.py           # Public FENs & metadata (NO secret solutions)
-│   ├── counterplay_cli.py     # Public CLI client (observe, inspect, play, status)
-│   └── verifier.py            # Local copy of authoritative game evaluator
-├── solution/
-│   ├── solve.sh               # Reference solve wrapper
-│   └── oracle_policy.py       # Plays strictly via public counterplay CLI (Scores 1.0000)
-└── tests/
-    ├── test.sh                # Verifier script writing to /logs/verifier/reward.txt
-    ├── verifier.py            # Independent game replay & Stockfish evaluation
-    └── test_baselines_and_exploits.py  # 7-test baseline & exploit validation suite
+Frontier agent (three trials, as judges will run it; needs your own key):
+```bash
+harbor run -p ./harbor_task -a opencode -m <provider/model> -k 3
 ```
 
-### Reproducing Evaluations Locally (Single Commands)
-
-1. **Run the Full Baseline and Adversarial Exploit Suite (7 Tests)**:
-   ```bash
-   .venv/bin/python harbor_task/tests/test_baselines_and_exploits.py
-   ```
-   *Verifies:*
-   - Test 1 (Oracle Reference): Scores **1.0000 / 1.0000**
-   - Test 2 (Do-Nothing Baseline): Scores **0.0000 / 1.0000**
-   - Test 3 (Stop-Early Baseline): Scores **0.2500 / 1.0000**
-   - Test 4 (Illegal Move Rejection): Blocked with error, board does not advance
-   - Test 5 (Quota Enforcement): 4th inspection rejected
-   - Test 6 (Poisoned Material Blunder): Careless blunder scores **0.0000**
-   - Test 7 (Anti-Tampering): Direct `/logs/verifier/reward.txt` overwrite attempt ignored
-
-2. **Run Reference Solution via Harbor**:
-   ```bash
-   harbor run --task harbor_task --agent solution/solve.sh
-   ```
-
-3. **Frontier Agent Evaluation (OpenCode / Gemini)**:
-   To run evaluations on frontier models using OpenCode and Gemini (e.g. `gemini-2.5-pro` or `gemini-1.5-pro`), set your Google API key and run:
-   ```bash
-   export GEMINI_API_KEY="your-api-key"
-   harbor run --task harbor_task --agent opencode --model gemini/gemini-2.5-pro
-   ```
-
+### Honest limitations
+- **No frontier-agent run has been recorded yet**, so the gap versus the oracle is **unmeasured**. We make no claims about which mistakes frontier models make.
+- The oracle is a fixed move table that is valid against the pinned opponent, not a general solver. Scenarios 1 (Bxb2 wins the queen) and 2 (parry Scholar's mate) are easy calibration positions. Scenarios 3 (…Qxg2 counter-strike) and 4 (attack vs. consolidate) are the harder ones.
+- `network_mode = "public"`, because the agent harness needs its model API. An agent could therefore download its own chess engine. `instruction.md` forbids this, but the environment does not technically prevent it.
+- Scores depend on the Stockfish build. The verifier logs the engine name it used, and Docker images pin Debian bookworm's `stockfish` package (15.1).

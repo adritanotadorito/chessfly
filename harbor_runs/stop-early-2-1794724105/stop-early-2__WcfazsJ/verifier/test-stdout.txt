@@ -1,0 +1,14 @@
+============================================================
+ChessFly: Counterplay - Independent Verifier
+============================================================
+Engine: Stockfish 15.1 at /referee/bin/stockfish (Threads=1, Hash=16, nodes=15000)
+[scenario_1_poisoned_material    ] Score: 0.2500 | Reason: evaluated | CP: 664
+[scenario_2_acute_threat_defense ] Score: 0.2500 | Reason: evaluated | CP: 30
+[scenario_3_tactical_counterplay ] Score: 0.0000 | Reason: incomplete_or_stopped_early | CP: N/A
+[scenario_4_sound_vs_unsound     ] Score: 0.0000 | Reason: incomplete_or_stopped_early | CP: N/A
+Completed scenarios: 2/4 -> completion gate x0.50
+------------------------------------------------------------
+TOTAL VERIFIED REWARD: 0.2500 / 1.0000
+------------------------------------------------------------
+Written reward 0.2500 to /logs/verifier/reward.txt
+[Verifier] reward: 0.2500
