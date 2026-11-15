@@ -373,7 +373,8 @@ with tab_games:
                 format_func=lambda gid: next(
                     f"{g['white']} vs {g['black']} · {g['result']} ({g['mode']}) [{g['timestamp'][:16].replace('T', ' ')}]"
                     for g in recent_games if g["id"] == gid
-                )
+                ),
+                key="replay_game_select",
             )
 
         loaded_game = load_game(selected_game_id)
@@ -381,32 +382,37 @@ with tab_games:
             moves = loaded_game.get("moves", [])
             total_plies = len(moves)
 
-            # Reset or clamp replay_ply when switching game ID
-            if "replay_game_id" not in st.session_state or st.session_state.replay_game_id != selected_game_id:
+            # The slider's widget key is the single source of truth for the replay ply.
+            # Buttons and board clicks queue a target ply, applied before the slider renders.
+            sld_key = f"sld_{selected_game_id}"
+            if st.session_state.get("replay_game_id") != selected_game_id:
                 st.session_state.replay_game_id = selected_game_id
-                st.session_state.replay_ply = total_plies
+                st.session_state[sld_key] = total_plies
+            pending = st.session_state.pop("_pending_replay_ply", None)
+            if pending is not None:
+                st.session_state[sld_key] = pending
+            st.session_state[sld_key] = max(0, min(total_plies, st.session_state.get(sld_key, total_plies)))
+            st.session_state.replay_ply = st.session_state[sld_key]
 
-            st.session_state.replay_ply = max(0, min(total_plies, st.session_state.get("replay_ply", total_plies)))
+            def _goto(ply):
+                st.session_state["_pending_replay_ply"] = max(0, min(total_plies, ply))
+                st.rerun()
 
             # Replay navigation bar
             nav_c1, nav_c2, nav_c3, nav_c4, nav_c5 = st.columns(5)
             if nav_c1.button("⏮ Start", key=f"btn_start_{selected_game_id}"):
-                st.session_state.replay_ply = 0
-                st.rerun()
+                _goto(0)
             if nav_c2.button("◀ Prev", key=f"btn_prev_{selected_game_id}"):
-                st.session_state.replay_ply = max(0, st.session_state.replay_ply - 1)
-                st.rerun()
+                _goto(st.session_state.replay_ply - 1)
             if nav_c3.button("Next ▶", key=f"btn_next_{selected_game_id}"):
-                st.session_state.replay_ply = min(total_plies, st.session_state.replay_ply + 1)
-                st.rerun()
+                _goto(st.session_state.replay_ply + 1)
             if nav_c4.button("⏭ End", key=f"btn_end_{selected_game_id}"):
-                st.session_state.replay_ply = total_plies
-                st.rerun()
+                _goto(total_plies)
             with nav_c5:
                 st.download_button("💾 Download PGN", loaded_game.get("pgn", ""), file_name=f"{selected_game_id}.pgn", key=f"dl_{selected_game_id}")
 
             if total_plies > 0:
-                cur_ply = st.slider("Step Through Plies", 0, total_plies, st.session_state.replay_ply, key=f"sld_{selected_game_id}")
+                cur_ply = st.slider("Step Through Plies", 0, total_plies, key=sld_key)
             else:
                 st.caption(f"ℹ️ Game terminated before move 1: {loaded_game.get('termination_reason', 'Empty game')}")
                 cur_ply = 0
@@ -466,8 +472,7 @@ with tab_games:
                 if replay_event and replay_event.get("type") == "select_ply":
                     target_ply = replay_event.get("ply")
                     if target_ply is not None and target_ply != st.session_state.replay_ply:
-                        st.session_state.replay_ply = max(0, min(total_plies, target_ply))
-                        st.rerun()
+                        _goto(target_ply)
 
             with r_col_right:
                 st.subheader("Match Metadata & Diagnostics")

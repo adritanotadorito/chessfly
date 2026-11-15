@@ -35,7 +35,7 @@ def save_game(game_data: Dict[str, Any]) -> str:
 def list_games(limit: int = 50) -> List[Dict[str, Any]]:
     """List recent saved games with metadata summary, newest first."""
     ensure_games_dir()
-    game_files = sorted(GAMES_DIR.glob("*.json"), key=lambda p: p.stat().st_mtime, reverse=True)
+    game_files = sorted(GAMES_DIR.glob("*.json"), key=lambda p: (p.stat().st_mtime, p.name), reverse=True)
     summaries = []
     for p in game_files[:limit]:
         try:
