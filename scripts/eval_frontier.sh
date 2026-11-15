@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Run a frontier agent (OpenCode harness) on ChessFly: Counterplay via Harbor.
 #   bash scripts/eval_frontier.sh list                      # models your key can use
-#   bash scripts/eval_frontier.sh google/gemini-2.5-pro 3   # 3 trials
+#   bash scripts/eval_frontier.sh gemini/gemini-2.5-pro 3   # 3 trials
 # Loads API keys from ./.env if present (never printed), runs N trials, then
 # refuses to keep logs that contain the key verbatim, and refreshes the report.
 set -euo pipefail
@@ -18,8 +18,10 @@ if [ "$MODEL" = "list" ]; then  # list Gemini models this key can call
   curl -s -H "x-goog-api-key: $KEY" "https://generativelanguage.googleapis.com/v1beta/models?pageSize=200" | python3 -c "import json,sys;d=json.load(sys.stdin);print(d.get('error',{}).get('message',''));[print('google/'+m['name'].split('/')[1]) for m in d.get('models',[]) if 'generateContent' in m.get('supportedGenerationMethods',[])]"
   exit 0
 fi
+# Harbor/LiteLLM name Google's provider "gemini/..." (google/... is not resolved and no key is forwarded).
+MODEL="${MODEL/#google\//gemini/}"
 JOB="frontier-$(echo "$MODEL" | tr '/:' '--')-$(date +%s)"
-harbor run -p ./harbor_task -a opencode -m "$MODEL" -k "$N" -n 1 -o harbor_runs --job-name "$JOB" || true
+harbor run -p ./harbor_task -a opencode -m "$MODEL" --api-key-name GEMINI_API_KEY -k "$N" -n 1 -o harbor_runs --job-name "$JOB" || true
 if [ -n "$KEY" ] && grep -rqF -- "$KEY" "harbor_runs/$JOB" 2>/dev/null; then
   echo "!! API key found verbatim in harbor_runs/$JOB; redacting." >&2
   grep -rlF -- "$KEY" "harbor_runs/$JOB" | while read -r f; do

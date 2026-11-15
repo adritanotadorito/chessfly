@@ -4,6 +4,7 @@
       "agent": "reference (oracle)",
       "trials": 1,
       "scored": 1,
+      "errored": 0,
       "mean": 1.0,
       "min": 1.0,
       "max": 1.0,
@@ -12,9 +13,20 @@
       ]
     },
     {
+      "agent": "opencode:google/gemini-2.5-pro",
+      "trials": 1,
+      "scored": 0,
+      "errored": 1,
+      "mean": null,
+      "min": null,
+      "max": null,
+      "rewards": []
+    },
+    {
       "agent": "baseline:stop-early-1",
       "trials": 1,
       "scored": 1,
+      "errored": 0,
       "mean": 0.0625,
       "min": 0.0625,
       "max": 0.0625,
@@ -26,6 +38,7 @@
       "agent": "baseline:stop-early-2",
       "trials": 1,
       "scored": 1,
+      "errored": 0,
       "mean": 0.25,
       "min": 0.25,
       "max": 0.25,
@@ -37,6 +50,7 @@
       "agent": "do-nothing (nop)",
       "trials": 1,
       "scored": 1,
+      "errored": 0,
       "mean": 0.0,
       "min": 0.0,
       "max": 0.0,
@@ -46,6 +60,35 @@
     }
   ],
   "trials": [
+    {
+      "job": "frontier-google-gemini-2.5-pro-1794727302",
+      "trial": "harbor_task__nPCEFNZ",
+      "agent": "opencode:google/gemini-2.5-pro",
+      "reward": 0.0,
+      "exception": "NonZeroAgentExitCodeError",
+      "scenarios": {
+        "scenario_1_poisoned_material": {
+          "score": 0.0,
+          "cp": null,
+          "reason": "incomplete_or_stopped_early"
+        },
+        "scenario_2_acute_threat_defense": {
+          "score": 0.0,
+          "cp": null,
+          "reason": "incomplete_or_stopped_early"
+        },
+        "scenario_3_tactical_counterplay": {
+          "score": 0.0,
+          "cp": null,
+          "reason": "incomplete_or_stopped_early"
+        },
+        "scenario_4_sound_vs_unsound": {
+          "score": 0.0,
+          "cp": null,
+          "reason": "incomplete_or_stopped_early"
+        }
+      }
+    },
     {
       "job": "nop-1794724068",
       "trial": "harbor_task__73Jq9PT",

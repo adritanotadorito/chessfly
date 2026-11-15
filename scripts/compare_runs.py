@@ -56,8 +56,10 @@ def main():
         groups.setdefault(row["agent"], []).append(row)
     summary = []
     for agent, rs in groups.items():
-        vals = [x["reward"] for x in rs if x["reward"] is not None]
+        # Trials that crashed (harness/auth errors) are infrastructure failures, not agent scores.
+        vals = [x["reward"] for x in rs if x["reward"] is not None and not x["exception"]]
         summary.append({"agent": agent, "trials": len(rs), "scored": len(vals),
+                        "errored": sum(1 for x in rs if x["exception"]),
                         "mean": round(statistics.mean(vals), 4) if vals else None,
                         "min": min(vals) if vals else None, "max": max(vals) if vals else None,
                         "rewards": vals})
@@ -67,9 +69,9 @@ def main():
     (ROOT / "reports").mkdir(exist_ok=True)
     (ROOT / "reports" / "harbor_comparison.json").write_text(json.dumps(out, indent=2))
     md = ["# ChessFly: Counterplay — Harbor comparison (observed trials only)", "",
-          "| Agent | Trials | Mean reward | Min | Max |", "|---|---|---|---|---|"]
+          "| Agent | Scored / trials | Errored (excluded) | Mean reward | Min | Max |", "|---|---|---|---|---|---|"]
     for s in summary:
-        md.append(f"| {s['agent']} | {s['scored']}/{s['trials']} | {s['mean']} | {s['min']} | {s['max']} |")
+        md.append(f"| {s['agent']} | {s['scored']}/{s['trials']} | {s['errored']} | {s['mean']} | {s['min']} | {s['max']} |")
     md += ["", "## Per-scenario (score / final cp from agent's side)", "",
            "| Agent | Trial | " + " | ".join(f"S{i+1}" for i in range(4)) + " | Reward |", "|---|---|---|---|---|---|---|"]
     for row in sorted(rows, key=lambda r: order({"agent": r["agent"]})):
@@ -77,7 +79,7 @@ def main():
         for s in SCEN:
             d = row["scenarios"][s]
             cells.append("—" if d["score"] is None else f"{d['score']} / {d['cp']}")
-        md.append(f"| {row['agent']} | {row['trial']} | " + " | ".join(cells) + f" | {row['reward']} |")
+        md.append(f"| {row['agent']} | {row['trial']} | " + " | ".join(cells) + f" | {row['reward']}{' (ERROR: ' + row['exception'] + ')' if row['exception'] else ''} |")
     (ROOT / "reports" / "harbor_comparison.md").write_text("\n".join(md) + "\n")
     print("\n".join(md[:4 + len(summary)]))
 
