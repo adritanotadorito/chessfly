@@ -13,6 +13,16 @@
       ]
     },
     {
+      "agent": "opencode:gemini/gemini-2.5-pro",
+      "trials": 1,
+      "scored": 0,
+      "errored": 1,
+      "mean": null,
+      "min": null,
+      "max": null,
+      "rewards": []
+    },
+    {
       "agent": "opencode:google/gemini-2.5-pro",
       "trials": 1,
       "scored": 0,
@@ -60,6 +70,35 @@
     }
   ],
   "trials": [
+    {
+      "job": "frontier-gemini-gemini-2.5-pro-1794727680",
+      "trial": "harbor_task__KcBDiuV",
+      "agent": "opencode:gemini/gemini-2.5-pro",
+      "reward": 0.0,
+      "exception": "NonZeroAgentExitCodeError",
+      "scenarios": {
+        "scenario_1_poisoned_material": {
+          "score": 0.0,
+          "cp": null,
+          "reason": "incomplete_or_stopped_early"
+        },
+        "scenario_2_acute_threat_defense": {
+          "score": 0.0,
+          "cp": null,
+          "reason": "incomplete_or_stopped_early"
+        },
+        "scenario_3_tactical_counterplay": {
+          "score": 0.0,
+          "cp": null,
+          "reason": "incomplete_or_stopped_early"
+        },
+        "scenario_4_sound_vs_unsound": {
+          "score": 0.0,
+          "cp": null,
+          "reason": "incomplete_or_stopped_early"
+        }
+      }
+    },
     {
       "job": "frontier-google-gemini-2.5-pro-1794727302",
       "trial": "harbor_task__nPCEFNZ",
