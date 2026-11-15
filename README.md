@@ -211,3 +211,69 @@ streamlit run app.py
 - **Match Setup**: Select from RL Fly, SFT Fly, Shuffled Control, Human, Stockfish (Weak, Medium, Strong), or Gemini.
 - **Replay & Diagnostics**: Replay any past game with move-by-move clocks and transparent reward auditing.
 - **Training Tab**: Live progress tracking, parameter shift verification, and benchmark evaluation tables.
+
+---
+
+## Harbor Benchmark: ChessFly: Counterplay (AfterQuery "Break the Agent" Challenge)
+
+A dedicated, isolated benchmark task built to evaluate frontier AI agents on tactical chess counterplay, defense, and poisoned material recognition under bounded engine inspection.
+
+### Challenge Evaluation Criteria Addressed
+- **Gap (30 pts)**: Frontier agents without deep tactical verification repeatedly blunder in counterplay or fall for poisoned material, scoring substantially below the reference oracle.
+- **Meaningful Difficulty (30 pts)**: Failures stem from actual decision-making under uncertainty, not lack of rules or broken tooling. Agents are given standard FEN, legal UCI move lists, and a bounded quota of 3 inspections per scenario (5k node engine preview).
+- **Reward Integrity (25 pts)**: All non-completion shortcuts are penalized:
+  - Do-nothing (`nop`): **0.0000**
+  - Stop early (1 scenario completed): **0.2500**
+  - Careless blunders / falling for poisoned material: **0.0000**
+  - Illegal moves: deterministically rejected without advancing board state
+  - Anti-tampering: direct writes to `/logs/verifier/reward.txt` are overwritten by the authoritative verifier replaying `/referee/logs/session.json`.
+- **Craft (15 pts)**: Fully compliant with the Harbor specification. Single-command execution for reference solution, verifier, and baseline test suite.
+
+### Harbor Task Directory Structure
+```
+harbor_task/
+├── task.toml                  # Harbor task definition and verifier metadata
+├── instruction.md             # Clear agent instructions & CLI tool documentation
+├── environment/
+│   ├── Dockerfile             # Multi-user container with isolated referee
+│   ├── entrypoint.sh          # Daemon initialization & privilege separation
+│   ├── referee_daemon.py      # Authoritative game engine & Stockfish sidecar
+│   ├── scenarios.py           # Public FENs & metadata (NO secret solutions)
+│   ├── counterplay_cli.py     # Public CLI client (observe, inspect, play, status)
+│   └── verifier.py            # Local copy of authoritative game evaluator
+├── solution/
+│   ├── solve.sh               # Reference solve wrapper
+│   └── oracle_policy.py       # Plays strictly via public counterplay CLI (Scores 1.0000)
+└── tests/
+    ├── test.sh                # Verifier script writing to /logs/verifier/reward.txt
+    ├── verifier.py            # Independent game replay & Stockfish evaluation
+    └── test_baselines_and_exploits.py  # 7-test baseline & exploit validation suite
+```
+
+### Reproducing Evaluations Locally (Single Commands)
+
+1. **Run the Full Baseline and Adversarial Exploit Suite (7 Tests)**:
+   ```bash
+   .venv/bin/python harbor_task/tests/test_baselines_and_exploits.py
+   ```
+   *Verifies:*
+   - Test 1 (Oracle Reference): Scores **1.0000 / 1.0000**
+   - Test 2 (Do-Nothing Baseline): Scores **0.0000 / 1.0000**
+   - Test 3 (Stop-Early Baseline): Scores **0.2500 / 1.0000**
+   - Test 4 (Illegal Move Rejection): Blocked with error, board does not advance
+   - Test 5 (Quota Enforcement): 4th inspection rejected
+   - Test 6 (Poisoned Material Blunder): Careless blunder scores **0.0000**
+   - Test 7 (Anti-Tampering): Direct `/logs/verifier/reward.txt` overwrite attempt ignored
+
+2. **Run Reference Solution via Harbor**:
+   ```bash
+   harbor run --task harbor_task --agent solution/solve.sh
+   ```
+
+3. **Frontier Agent Evaluation (OpenCode / Gemini)**:
+   To run evaluations on frontier models using OpenCode and Gemini (e.g. `gemini-2.5-pro` or `gemini-1.5-pro`), set your Google API key and run:
+   ```bash
+   export GEMINI_API_KEY="your-api-key"
+   harbor run --task harbor_task --agent opencode --model gemini/gemini-2.5-pro
+   ```
+

@@ -164,10 +164,15 @@ All 5 models were evaluated across three separate benchmark suites:
 | **Mean Cross-Entropy Loss** | 3.2801 | 3.3294 | 2.5281 | 2.4967 | 3.8523 |
 | **Legal Move Rate** | 100.0% (1000/1000) | 100.0% (1000/1000) | 100.0% (1000/1000) | 100.0% (1000/1000) | 100.0% (1000/1000) |
 | — `mateIn1` (200) | 4.5% (9) | 4.0% (8) | **44.5%** (89) | 37.5% (75) | 6.5% (13) |
-| — `mateIn2` (200) | 2.0% (4) | 2.5% (5) | **38.0%** (76) | 36.5% (73) | 5.5% (11) |
+| — `mateIn2` (200) first-move match¹ | 2.0% (4) | 2.5% (5) | **38.0%** (76) | 36.5% (73) | 5.5% (11) |
+| — `mateIn2` (200) full combo success² | 0.0% (0) | 0.0% (0) | **20.5%** (41) | 20.0% (40) | 0.0% (0) |
 | — `defense_equality` (200) | 17.5% (35) | 16.5% (33) | 37.5% (75) | **38.5%** (77) | 16.5% (33) |
 | — `hanging_fork` (200) | 4.0% (8) | 5.5% (11) | **30.5%** (61) | 28.0% (56) | 5.0% (10) |
 | — `advantage_quiet` (200) | 8.0% (16) | 10.0% (20) | **24.5%** (49) | 22.5% (45) | 8.5% (17) |
+
+> **¹ `mateIn2` first-move match:** the model's greedy argmax first move from `solver_fen` exactly equals the Lichess solution move `moves[1]`. Does NOT verify that this move forces mate on every legal opponent reply, nor that the model delivers mate on its second move.
+>
+> **² `mateIn2` full combo success:** the model's first move forces checkmate in one more move against *every* legal opponent reply, and the model's chosen second move is checkmate in each branch. Audited in `reports/matein2_audit.md`. Of 76 first-move matches, only 41 (53.9%) resulted in full combo completion; 35 cases had the right opening move but the model failed on the follow-up.
 
 ---
 
@@ -227,10 +232,13 @@ All 5 models were evaluated across three separate benchmark suites:
 - It solved **350 out of 1,000 (35.0%)** unseen frozen test puzzles, compared to only 72 (7.2%) for its parent.
 - The policy improved substantially across every tactical theme:
   - Mate in 1: 4.5% $\rightarrow$ **44.5%** (+40.0%)
-  - Mate in 2: 2.0% $\rightarrow$ **38.0%** (+36.0%)
+  - Mate in 2 (first-move match): 2.0% $\rightarrow$ **38.0%** (+36.0%) ⚠ *See note below*
+  - Mate in 2 (full combo, all branches): 0.0% $\rightarrow$ **20.5%** (+20.5%) ← *correct claim*
   - Defense & Equality: 17.5% $\rightarrow$ **37.5%** (+20.0%)
   - Hanging & Fork: 4.0% $\rightarrow$ **30.5%** (+26.5%)
   - Advantage & Quiet Moves: 8.0% $\rightarrow$ **24.5%** (+16.5%)
+
+> **⚠ Note on mateIn2 accuracy:** A subsequent audit (see `reports/matein2_audit.md`) determined that the 38.0% figure measures only whether the model's first move matches the Lichess puzzle solution move. It does **not** measure whether the model delivered mate in the follow-up. Of the 76 first-move matches, **41 (53.9%)** resulted in the model completing the two-move combination against all legal opponent replies. The remaining 35 cases had the correct opening move but the model chose a non-mating second move. The correct claim for genuine mate-in-two completion is **20.5% (41/200)** for fly-puzzle-10k vs. **0.0% (0/200)** for the untrained parent.
 - Across 1,000 test positions, it made zero illegal moves (100.0% legal rate).
 
 ### 2. Did general chess ability hold up?

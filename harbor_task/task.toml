@@ -1,0 +1,14 @@
+[task]
+name = "chessfly-counterplay"
+version = "1.0.0"
+description = "ChessFly: Counterplay - Tactical counterplay decision benchmark under bounded inspection for frontier AI agents"
+author = "ChessFly Team"
+timeout = 600
+
+[environment]
+dockerfile = "environment/Dockerfile"
+
+[verifier]
+test_cmd = "bash tests/test.sh"
+reward_file = "/logs/verifier/reward.txt"
+metric = "reward"
